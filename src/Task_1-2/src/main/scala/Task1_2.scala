@@ -20,14 +20,15 @@ object Task1_2 {
   def isAtLeastXXL(size: String): Boolean = {
     val s = size.trim.toUpperCase
     val xlSizes = Set("XXL", "2XL", "XXXL", "3XL", "4XL", "5XL", "6XL")
-    xlSizes.contains(s) || s.matches("\\d+XL")
+    xlSizes.contains(s) || s.matches("([2-9]|\\d{2,})XL")
   }
+
+  private val dateFormatter = DateTimeFormatter.ofPattern("MM-dd-yy")
 
   /** Parse date MM-dd-yy thành tháng YYYY-MM */
   def parseMonth(dateStr: String): Option[String] = {
     try {
-      val formatter = DateTimeFormatter.ofPattern("MM-dd-yy")
-      val date = LocalDate.parse(dateStr.trim, formatter)
+      val date = LocalDate.parse(dateStr.trim, dateFormatter)
       Some(f"${date.getYear}-${date.getMonthValue}%02d")
     } catch {
       case _: Exception => None
@@ -74,22 +75,27 @@ object Task1_2 {
       })
 
     // Bước 2: REDUCE 1 — Tính variety (distinct SKU count) + hasXXL per style
-    val styleVariety = mapped.aggregateByKey((Set.empty[String], false))(
-      (acc, value) => (acc._1 + value._1, acc._2 || value._2),
-      (acc1, acc2) => (acc1._1 ++ acc2._1, acc1._2 || acc2._2)
+    val styleVariety = mapped.aggregateByKey((scala.collection.mutable.Set.empty[String], false))(
+      (acc, value) => {
+        acc._1 += value._1
+        (acc._1, acc._2 || value._2)
+      },
+      (acc1, acc2) => {
+        acc1._1 ++= acc2._1
+        (acc1._1, acc1._2 || acc2._2)
+      }
     ).map {
       case ((state, month, _), (skuSet, hasXXL)) =>
         ((state, month), (skuSet.size, hasXXL))
     }
 
-    // Bước 3: REDUCE 2 — Lọc qualifying styles, tính median variety per (State, Month)
+    // Bước 3: REDUCE 2 — Lọc qualifying styles trước khi shuffle, tính median variety per (State, Month)
     val medianVariety = styleVariety
+      .filter { case (_, (_, hasXXL)) => hasXXL }
+      .map { case (k, (size, _)) => (k, size) }
       .groupByKey()
-      .flatMap { case ((state, month), stylesIter) =>
-        val qualifyingVarieties = stylesIter
-          .filter(_._2)
-          .map(_._1)
-          .toList.sorted
+      .flatMap { case ((state, month), sizesIter) =>
+        val qualifyingVarieties = sizesIter.toList.sorted
 
         computeMedian(qualifyingVarieties).map(median =>
           (state, month, median)
