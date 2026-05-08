@@ -1,76 +1,195 @@
-# Hướng dẫn Cài đặt & Chạy Dự án Lab 03 (Scala + Spark)
+# Hướng Dẫn Chạy Lab 03 - Scala + Spark
 
-Dự án này đã được cấu hình sẵn sử dụng **SBT (Scala Build Tool)**. Nhờ đó, việc quản lý các package (thư viện Spark, Hadoop) được tự động hoá hoàn toàn. Bạn không cần tải thủ công bất kỳ file `.jar` nào.
+Dự án này chứa mã nguồn cho 4 phần của Lab 03. Project không dùng SBT; các task được biên dịch bằng `scalac`, đóng gói tạm bằng `jar`, rồi chạy bằng `spark-submit` ở chế độ local.
 
-Dưới đây là các bước để setup môi trường code trên máy tính của bạn:
+## 1. Yêu Cầu Môi Trường
 
-## 1. Yêu cầu hệ thống cơ bản (Prerequisites)
+Cần cài sẵn:
 
-Trước khi mở code, hãy đảm bảo máy bạn đã cài các phần mềm sau:
+- Java 17, khuyến nghị cho Spark 3.x trên máy hiện tại.
+- Scala 2.12.x.
+- Apache Spark, có lệnh `spark-submit`.
+- Dataset Amazon Sale Report:
 
-1. **Java Development Kit (JDK):** Yêu cầu cài đặt JDK 11 trên Linux/WSL.
-2. **SBT (Scala Build Tool):** Phần mềm quản lý thư viện và build project cho Scala (cài đặt qua Terminal).
-3. **IDE (Phần mềm viết code):**
-   - **Khuyến nghị số 1:** **IntelliJ IDEA** (bản Community miễn phí).
-   - **Lựa chọn 2:** **Visual Studio Code** (yêu cầu cài thêm extension).
+```bash
+/home/pearspringmind/Studying/Big Data/Lab03/Lab03_BigData/data/input/Amazon Sale Report.csv
+```
 
-## 2. Hướng dẫn Mở và Tải thư viện bằng IDE
+Kiểm tra môi trường:
 
-### Lựa chọn A: Dùng IntelliJ IDEA (Khuyến nghị)
-1. Cài đặt **IntelliJ IDEA**.
-2. Mở IntelliJ, vào mục **Plugins**, tìm và cài đặt plugin **Scala** của JetBrains. Sau đó khởi động lại IDE.
-3. Mở IntelliJ, chọn **Open** -> Chọn thư mục `Lab03` (chứa file `build.sbt`).
-4. IntelliJ sẽ nhận diện đây là một project SBT. Khi thấy thanh thông báo xuất hiện ở góc dưới bên phải hoặc trên cùng, hãy bấm **Load SBT Project**.
-5. Đợi IDE tự động tải tất cả các thư viện Spark và Hadoop về máy. Quá trình này diễn ra ngầm (khoảng 2-5 phút). Bạn sẽ thấy thư mục code hết bị báo lỗi đỏ.
+```bash
+java -version
+scala -version
+scalac -version
+spark-submit --version
+```
 
-### Lựa chọn B: Dùng VS Code
-1. Cài đặt extension **Scala (Metals)** trong VS Code.
-2. Mở thư mục `Lab03` bằng VS Code.
-3. Extension Metals sẽ tự nhận diện file `build.sbt` và hiện một pop-up hỏi *"Import build?"*.
-4. Nhấn **Import build** và chờ Metals tải thư viện về.
+Nếu máy đang mặc định Java 21, nên ép riêng phiên terminal dùng Java 17 trước khi compile/chạy:
 
----
+```bash
+export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
+export PATH="$JAVA_HOME/bin:$PATH"
+```
 
-## 3. Hướng dẫn Setup trên Linux / WSL (Theo chuẩn Lab 1)
+## 2. Cấu Trúc Task
 
-Vì Lab 1 yêu cầu chạy trên môi trường Linux (hoặc WSL trên Windows), bạn sẽ thiết lập trực tiếp qua Terminal. Spark sẽ chạy tính toán cục bộ (`local mode`) tự nhiên trên môi trường này mà không bị lỗi.
+| Task | File nguồn | Main class | Input mặc định | Output |
+|---|---|---|---|---|
+| Task 1-1 | `src/Task_1-1/src/main/scala/Task1_1.scala` | `Task1_1` | Amazon Sale Report CSV | `data/output/Task_1-1.csv` |
+| Task 1-2 | `src/Task_1-2/src/main/scala/Task1_2.scala` | `Task1_2` | Amazon Sale Report CSV | `data/output/Task_1-2.csv` |
+| Task 2-1 | `src/Task_2-1/src/main/scala/Task2_1.scala` | `Task2_1` | Amazon Sale Report CSV | `data/output/Task_2-1.parquet` |
+| Task 2-2 | `src/Task_2-2/src/main/scala/Task2_2.scala` | `Task2_2` | Amazon Sale Report CSV | `data/output/Task_2-2.parquet` |
 
-**Cách cài đặt các công cụ cơ bản qua Terminal (Ubuntu/Debian):**
+Ghi chú: các task có thể nhận đường dẫn input/output qua tham số dòng lệnh nếu mã nguồn của task đó đã hỗ trợ. Task 1-1 hiện đã hỗ trợ 2 tham số: `inputPath outputPath`.
 
-1. **Cài đặt Java (JDK 11):**
-   ```bash
-   sudo apt update
-   sudo apt install openjdk-11-jdk -y
-   ```
-   *Kiểm tra lại xem Java đã nhận chưa bằng lệnh `java -version`.*
+## 3. Chuẩn Bị Thư Mục
 
-2. **Cài đặt SBT:**
-   ```bash
-   sudo apt-get update
-   sudo apt-get install apt-transport-https curl gnupg -yqq
-   echo "deb https://repo.scala-sbt.org/scalasbt/debian all main" | sudo tee /etc/apt/sources.list.d/sbt.list
-   echo "deb https://repo.scala-sbt.org/scalasbt/debian /" | sudo tee /etc/apt/sources.list.d/sbt_old.list
-   curl -sL "https://keyserver.ubuntu.com/pks/lookup?op=get&search=0x2EE0EA64E40A89B84B2DF73499E82A75642AC823" | sudo -H gpg --no-default-keyring --keyring gnupg-ring:/etc/apt/trusted.gpg.d/scalasbt-release.gpg --import
-   sudo chmod 644 /etc/apt/trusted.gpg.d/scalasbt-release.gpg
-   sudo apt-get update
-   sudo apt-get install sbt -y
-   ```
+Chạy từ thư mục gốc project:
 
-3. **Làm việc với IDE trên môi trường WSL (Nếu dùng Windows):**
-   - **Với VS Code:** Cài extension **WSL**. Mở VS Code, click vào biểu tượng màu xanh ở góc dưới cùng bên trái (><) và chọn **"Connect to WSL"**. Sau đó điều hướng mở thư mục `Lab03` và để Metals tải thư viện như phần 2.
-   - **Với IntelliJ IDEA:** Cứ mở IntelliJ như bình thường. Khi chọn **Open**, bạn hãy đi tới thư mục mạng của WSL (thường là `\\wsl$\Ubuntu\home\tên-user\...` hoặc `\\wsl.localhost\Ubuntu\...`) để mở thư mục `Lab03`. IDE sẽ nhận diện hoàn hảo như một project Linux.
+```bash
+cd "/home/pearspringmind/Studying/Big Data/Lab03/Lab03_BigData"
+mkdir -p data/input data/output
+```
 
----
+Đặt file dataset vào:
 
-## 4. Cách Chạy Code
+```bash
+data/input/Amazon Sale Report.csv
+```
 
-Project đã được chia làm 4 thư mục ứng với 4 Task. Mỗi Task có 1 file `.scala` riêng biệt có chứa hàm `main`.
+## 4. Compile Một Task
 
-- **Với IntelliJ IDEA:** Bạn chỉ cần mở file `Task1_1.scala` (nằm trong `src/Task_1-1/src/main/scala/`), bấm vào nút **Play (mũi tên màu xanh)** bên cạnh chữ `object Task1_1` để chạy.
-- **Dữ liệu đầu vào:** Hãy đặt file `Amazon Sale Report.csv` trực tiếp trong thư mục `Lab03` (ngang hàng với file `build.sbt` này). 
-- **Cách đọc data:** Trong code, dùng đường dẫn tương đối:
-  ```scala
-  val df = spark.read.option("header", "true").csv("Amazon Sale Report.csv")
-  ```
+Cú pháp chung:
 
-Chúc các bạn code vui vẻ và đạt full điểm môn Big Data!
+```bash
+TASK_NAME="task11"
+SOURCE_FILE="src/Task_1-1/src/main/scala/Task1_1.scala"
+
+rm -rf "/tmp/lab03-${TASK_NAME}-classes" "/tmp/lab03-${TASK_NAME}.jar"
+mkdir -p "/tmp/lab03-${TASK_NAME}-classes"
+
+scalac -classpath "/home/pearspringmind/opt/spark/jars/*" \
+  -d "/tmp/lab03-${TASK_NAME}-classes" \
+  "$SOURCE_FILE"
+
+jar cf "/tmp/lab03-${TASK_NAME}.jar" -C "/tmp/lab03-${TASK_NAME}-classes" .
+```
+
+Đổi `TASK_NAME` và `SOURCE_FILE` tương ứng khi compile task khác.
+
+## 5. Chạy Các Task
+
+### Task 1-1
+
+```bash
+TASK_NAME="task11"
+SOURCE_FILE="src/Task_1-1/src/main/scala/Task1_1.scala"
+
+rm -rf "/tmp/lab03-${TASK_NAME}-classes" "/tmp/lab03-${TASK_NAME}.jar"
+mkdir -p "/tmp/lab03-${TASK_NAME}-classes"
+scalac -classpath "/home/pearspringmind/opt/spark/jars/*" \
+  -d "/tmp/lab03-${TASK_NAME}-classes" \
+  "$SOURCE_FILE"
+jar cf "/tmp/lab03-${TASK_NAME}.jar" -C "/tmp/lab03-${TASK_NAME}-classes" .
+
+spark-submit \
+  --class Task1_1 \
+  --master local[*] \
+  "/tmp/lab03-${TASK_NAME}.jar" \
+  "data/input/Amazon Sale Report.csv" \
+  "data/output/Task_1-1.csv"
+```
+
+### Task 1-2
+
+```bash
+TASK_NAME="task12"
+SOURCE_FILE="src/Task_1-2/src/main/scala/Task1_2.scala"
+
+rm -rf "/tmp/lab03-${TASK_NAME}-classes" "/tmp/lab03-${TASK_NAME}.jar"
+mkdir -p "/tmp/lab03-${TASK_NAME}-classes"
+scalac -classpath "/home/pearspringmind/opt/spark/jars/*" \
+  -d "/tmp/lab03-${TASK_NAME}-classes" \
+  "$SOURCE_FILE"
+jar cf "/tmp/lab03-${TASK_NAME}.jar" -C "/tmp/lab03-${TASK_NAME}-classes" .
+
+spark-submit \
+  --class Task1_2 \
+  --master local[*] \
+  "/tmp/lab03-${TASK_NAME}.jar"
+```
+
+### Task 2-1
+
+```bash
+TASK_NAME="task21"
+SOURCE_FILE="src/Task_2-1/src/main/scala/Task2_1.scala"
+
+rm -rf "/tmp/lab03-${TASK_NAME}-classes" "/tmp/lab03-${TASK_NAME}.jar"
+mkdir -p "/tmp/lab03-${TASK_NAME}-classes"
+scalac -classpath "/home/pearspringmind/opt/spark/jars/*" \
+  -d "/tmp/lab03-${TASK_NAME}-classes" \
+  "$SOURCE_FILE"
+jar cf "/tmp/lab03-${TASK_NAME}.jar" -C "/tmp/lab03-${TASK_NAME}-classes" .
+
+spark-submit \
+  --class Task2_1 \
+  --master local[*] \
+  "/tmp/lab03-${TASK_NAME}.jar"
+```
+
+### Task 2-2
+
+```bash
+TASK_NAME="task22"
+SOURCE_FILE="src/Task_2-2/src/main/scala/Task2_2.scala"
+
+rm -rf "/tmp/lab03-${TASK_NAME}-classes" "/tmp/lab03-${TASK_NAME}.jar"
+mkdir -p "/tmp/lab03-${TASK_NAME}-classes"
+scalac -classpath "/home/pearspringmind/opt/spark/jars/*" \
+  -d "/tmp/lab03-${TASK_NAME}-classes" \
+  "$SOURCE_FILE"
+jar cf "/tmp/lab03-${TASK_NAME}.jar" -C "/tmp/lab03-${TASK_NAME}-classes" .
+
+spark-submit \
+  --class Task2_2 \
+  --master local[*] \
+  "/tmp/lab03-${TASK_NAME}.jar"
+```
+
+## 6. Kiểm Tra Output
+
+Liệt kê các file kết quả:
+
+```bash
+find data/output -maxdepth 1 -mindepth 1 -printf "%f\n" | sort
+```
+
+Kết quả cuối cùng cần có theo đề:
+
+```text
+Task_1-1.csv
+Task_1-2.csv
+Task_2-1.parquet
+Task_2-2.parquet
+```
+
+Kiểm tra nhanh Task 1-1:
+
+```bash
+sed -n '1,10p' data/output/Task_1-1.csv
+wc -l data/output/Task_1-1.csv
+```
+
+Header đúng của Task 1-1:
+
+```csv
+ship-state,date,most_bought_size,max_quantity
+```
+
+## 7. Ghi Chú Kỹ Thuật
+
+- Task 1-1 thuộc nhóm Advanced MapReduce, nên mã nguồn dùng RDD/MapReduce-style: `mapPartitions`, `flatMap`, `reduceByKey`, `sortBy`, `saveAsTextFile`.
+- Task 2-1 và Task 2-2 thuộc nhóm Spark Structured APIs, nên khi hoàn thiện cần dùng DataFrame/Dataset API và không dùng Spark SQL string query làm logic chính.
+- Output theo yêu cầu phải là file đơn lẻ đọc được trên filesystem bình thường, không phải thư mục chứa nhiều `part-*`.
+- Nếu `spark-submit` báo lỗi socket trong môi trường sandbox, hãy chạy lệnh trong terminal thật của máy. Spark local cần mở driver socket nội bộ để thực thi job.
