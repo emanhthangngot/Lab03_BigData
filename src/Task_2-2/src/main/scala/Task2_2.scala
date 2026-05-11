@@ -94,6 +94,11 @@ object Task2_2 {
     }
 
     fs.delete(tmpPath, true)
+
+    // Also remove any Hadoop checksum sidecar file
+    val pParent = Option(outPath.getParent).getOrElse(new Path("."))
+    val checksumPath = new Path(pParent, "." + outPath.getName + ".crc")
+    if (fs.exists(checksumPath)) fs.delete(checksumPath, false)
   }
 
   def main(args: Array[String]): Unit = {
