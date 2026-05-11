@@ -308,10 +308,10 @@ object Task2_2 {
       .join(p80ExactDf,  Seq("SKU", "month"), "left")
       // Null → 0.0 for groups with 0 qualifying orders (shouldn't normally happen
       // since at least 1 order always meets promo_count >= threshold for nearest-rank)
-      .withColumn("p90_stddev_approx", coalesce(col("p90_stddev_approx"), lit(0.0)))
-      .withColumn("p80_stddev_approx", coalesce(col("p80_stddev_approx"), lit(0.0)))
-      .withColumn("p90_stddev_exact",  coalesce(col("p90_stddev_exact"),  lit(0.0)))
-      .withColumn("p80_stddev_exact",  coalesce(col("p80_stddev_exact"),  lit(0.0)))
+      .withColumn("p90_stddev_approx", round(coalesce(col("p90_stddev_approx"), lit(0.0)), 4))
+      .withColumn("p80_stddev_approx", round(coalesce(col("p80_stddev_approx"), lit(0.0)), 4))
+      .withColumn("p90_stddev_exact",  round(coalesce(col("p90_stddev_exact"),  lit(0.0)), 4))
+      .withColumn("p80_stddev_exact",  round(coalesce(col("p80_stddev_exact"),  lit(0.0)), 4))
       .select(
         col("SKU"),
         col("month"),
