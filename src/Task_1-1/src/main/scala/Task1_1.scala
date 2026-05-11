@@ -18,7 +18,10 @@ import java.util.Locale
  * A row contributes only when Status contains "shipped" case-insensitively and
  * Qty is positive. We sum Qty by Size and emit the Size with the largest total.
  */
-object Task1_1 {
+case class RequiredColumns(date: Int, status: Int, qty: Int, size: Int, state: Int)
+case class Purchase(orderEpochDay: Long, state: String, size: String, qty: Int)
+
+object Task1_1 extends Serializable {
 
   private val DateColumn = "Date"
   private val StatusColumn = "Status"
@@ -27,17 +30,6 @@ object Task1_1 {
   private val StateColumn = "ship-state"
 
   private val OutputHeader = "ship-state,date,most_bought_size,max_quantity"
-
-  private val DateFormatters = Seq(
-    DateTimeFormatter.ofPattern("MM-dd-yy"),
-    DateTimeFormatter.ofPattern("M-d-yy"),
-    DateTimeFormatter.ofPattern("MM/dd/yy"),
-    DateTimeFormatter.ofPattern("M/d/yy")
-  )
-  private val OutputDateFormatter = DateTimeFormatter.ofPattern("MM-dd-yy")
-
-  private case class RequiredColumns(date: Int, status: Int, qty: Int, size: Int, state: Int)
-  private case class Purchase(orderEpochDay: Long, state: String, size: String, qty: Int)
 
   /** 
    * Custom CSV Line Parser to avoid external libraries like univocity.
@@ -80,6 +72,12 @@ object Task1_1 {
   }
 
   private def parseDate(value: String): Option[LocalDate] = {
+    val DateFormatters = Seq(
+      DateTimeFormatter.ofPattern("MM-dd-yy"),
+      DateTimeFormatter.ofPattern("M-d-yy"),
+      DateTimeFormatter.ofPattern("MM/dd/yy"),
+      DateTimeFormatter.ofPattern("M/d/yy")
+    )
     val trimmed = Option(value).getOrElse("").trim
     DateFormatters.iterator
       .map(formatter => scala.util.Try(LocalDate.parse(trimmed, formatter)).toOption)
@@ -131,9 +129,10 @@ object Task1_1 {
    */
   private def writeSingleCsv(lines: RDD[String], outputFile: String): Unit = {
     val sc = lines.sparkContext
-    val fs = FileSystem.get(sc.hadoopConfiguration)
-    val outputPath = new Path(outputFile)
-    val tempPath = new Path(outputFile + ".spark-tmp")
+    val absOutputFile = "file://" + new java.io.File(outputFile).getAbsolutePath
+    val outputPath = new Path(absOutputFile)
+    val tempPath = new Path(absOutputFile + ".spark-tmp")
+    val fs = tempPath.getFileSystem(sc.hadoopConfiguration)
 
     if (fs.exists(tempPath)) fs.delete(tempPath, true)
     if (fs.exists(outputPath)) fs.delete(outputPath, true)
@@ -169,7 +168,8 @@ object Task1_1 {
       val sc = spark.sparkContext
       sc.setLogLevel("WARN")
 
-      val lines = sc.textFile(inputPath)
+      val absInput = "file://" + new java.io.File(inputPath).getAbsolutePath
+      val lines = sc.textFile(absInput)
       val headerStr = lines.first()
       val header = parseCsvLine(headerStr)
       val columns = requireTaskColumns(header)
@@ -235,6 +235,7 @@ object Task1_1 {
         .sortBy { case ((state, day), _) => (state, day) }
 
       val csvRows = winners.map { case ((state, day), (size, totalQty)) =>
+        val OutputDateFormatter = DateTimeFormatter.ofPattern("MM-dd-yy")
         val date = LocalDate.ofEpochDay(day).format(OutputDateFormatter)
         Seq(csvEscape(state), date, csvEscape(size), totalQty.toString).mkString(",")
       }

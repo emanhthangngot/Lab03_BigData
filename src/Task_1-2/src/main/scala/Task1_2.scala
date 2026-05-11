@@ -14,7 +14,7 @@ import java.io.{PrintWriter, File}
  *
  * @author Trần Lê Trung Trực (23120180)
  */
-object Task1_2 {
+object Task1_2 extends Serializable {
 
   /** Kiểm tra size có thuộc nhóm >= XXL không */
   def isAtLeastXXL(size: String): Boolean = {
@@ -23,10 +23,9 @@ object Task1_2 {
     xlSizes.contains(s) || s.matches("([2-9]|\\d{2,})XL")
   }
 
-  private val dateFormatter = DateTimeFormatter.ofPattern("MM-dd-yy")
-
   /** Parse date MM-dd-yy thành tháng YYYY-MM */
   def parseMonth(dateStr: String): Option[String] = {
+    val dateFormatter = DateTimeFormatter.ofPattern("MM-dd-yy")
     try {
       val date = LocalDate.parse(dateStr.trim, dateFormatter)
       Some(f"${date.getYear}-${date.getMonthValue}%02d")
@@ -47,16 +46,20 @@ object Task1_2 {
   }
 
   def main(args: Array[String]): Unit = {
+    val inputPath = if (args.nonEmpty) args(0) else "Amazon Sale Report.csv"
+    val outputPath = if (args.length >= 2) args(1) else "Task_1-2.csv"
+
     val spark = SparkSession.builder()
       .appName("Task 1-2: State-level Median Variety per Month")
       .master("local[*]")
+      .config("spark.hadoop.fs.defaultFS", "file:///")
       .getOrCreate()
 
     val sc = spark.sparkContext
     sc.setLogLevel("WARN")
 
     // Bước 0: Đọc CSV
-    val df = spark.read.option("header", "true").csv("Amazon Sale Report.csv")
+    val df = spark.read.option("header", "true").csv(inputPath)
 
     // Bước 1: MAP — Clean data + emit (State, Month, Style) -> (SKU, isXXL)
     val mapped = df.select("Date", "SKU", "Style", "Size", "ship-state")
@@ -103,7 +106,6 @@ object Task1_2 {
       }
 
     // Bước 4: Export ra single CSV file
-    val outputPath = "Task_1-2.csv"
     val results = medianVariety.sortBy(r => (r._1, r._2)).collect()
 
     val writer = new PrintWriter(new File(outputPath))

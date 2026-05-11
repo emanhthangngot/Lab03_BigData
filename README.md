@@ -1,195 +1,74 @@
-# Hướng Dẫn Chạy Lab 03 - Scala + Spark
+# Lab 03 - Advanced MapReduce & Spark Structured APIs
 
-Dự án này chứa mã nguồn cho 4 phần của Lab 03. Project không dùng SBT; các task được biên dịch bằng `scalac`, đóng gói tạm bằng `jar`, rồi chạy bằng `spark-submit` ở chế độ local.
+Dự án này chứa mã nguồn Scala cho 4 bài tập (Task 1-1, 1-2, 2-1, 2-2) của Lab 03.
+Để đảm bảo dễ dàng kiểm thử, project sử dụng công cụ `spark-shell` để tự động compile và chạy toàn bộ mã nguồn mà không cần cài đặt các công cụ build phức tạp như `sbt`.
 
 ## 1. Yêu Cầu Môi Trường
+- **Java 8, 11 hoặc 17** (được hỗ trợ bởi Spark 3.x)
+- **Apache Spark** (cần có lệnh `spark-shell` và `spark-submit` trong biến môi trường `$PATH`)
+- **Dataset:** Cần đặt dataset `Amazon Sale Report.csv` vào thư mục gốc của project (nơi chứa file `README.md`).
 
-Cần cài sẵn:
+---
 
-- Java 17, khuyến nghị cho Spark 3.x trên máy hiện tại.
-- Scala 2.12.x.
-- Apache Spark, có lệnh `spark-submit`.
-- Dataset Amazon Sale Report:
+## 2. Cách Chạy Cả 4 Bài Tập Tự Động (Khuyên Dùng)
 
+Chúng tôi đã chuẩn bị sẵn một script có tên `run_all.scala`. Script này sẽ tự động nạp (load) lần lượt 4 file nguồn Scala, thực thi chúng và lưu kết quả vào thư mục `data/output/`.
+
+### 🐧 Trên Linux Native hoặc macOS
+Mở terminal tại thư mục gốc của project và chạy lệnh sau:
 ```bash
-/home/pearspringmind/Studying/Big Data/Lab03/Lab03_BigData/data/input/Amazon Sale Report.csv
+spark-shell < run_all.scala
 ```
 
-Kiểm tra môi trường:
-
+### 🪟 Trên Windows Subsystem for Linux (WSL)
+Trên WSL, việc pipe direct file vào spark-shell thỉnh thoảng gặp lỗi hiển thị/treo do JLine. Bạn nên chạy lệnh này thay thế:
 ```bash
-java -version
-scala -version
-scalac -version
-spark-submit --version
+spark-shell -i run_all.scala < /dev/null
 ```
+*(Lưu ý: Môi trường WSL cần cài đặt Java và Spark cho Linux đúng cách, không dùng file .exe của Windows).*
 
-Nếu máy đang mặc định Java 21, nên ép riêng phiên terminal dùng Java 17 trước khi compile/chạy:
+---
 
+## 3. Cách Chạy Từng Bài Tập Độc Lập
+
+Nếu bạn muốn test từng bài một thay vì chạy cả 4, bạn có thể truyền thẳng code Scala vào spark-shell.
+
+**Task 1-1:**
 ```bash
-export JAVA_HOME=/usr/lib/jvm/java-17-openjdk
-export PATH="$JAVA_HOME/bin:$PATH"
+spark-shell -i <(echo ':load src/Task_1-1/src/main/scala/Task1_1.scala
+Task1_1.main(Array("Amazon Sale Report.csv", "data/output/Task_1-1.csv"))
+sys.exit(0)')
 ```
 
-## 2. Cấu Trúc Task
-
-| Task | File nguồn | Main class | Input mặc định | Output |
-|---|---|---|---|---|
-| Task 1-1 | `src/Task_1-1/src/main/scala/Task1_1.scala` | `Task1_1` | Amazon Sale Report CSV | `data/output/Task_1-1.csv` |
-| Task 1-2 | `src/Task_1-2/src/main/scala/Task1_2.scala` | `Task1_2` | Amazon Sale Report CSV | `data/output/Task_1-2.csv` |
-| Task 2-1 | `src/Task_2-1/src/main/scala/Task2_1.scala` | `Task2_1` | Amazon Sale Report CSV | `data/output/Task_2-1.parquet` |
-| Task 2-2 | `src/Task_2-2/src/main/scala/Task2_2.scala` | `Task2_2` | Amazon Sale Report CSV | `data/output/Task_2-2.parquet` |
-
-Ghi chú: các task có thể nhận đường dẫn input/output qua tham số dòng lệnh nếu mã nguồn của task đó đã hỗ trợ. Task 1-1 hiện đã hỗ trợ 2 tham số: `inputPath outputPath`.
-
-## 3. Chuẩn Bị Thư Mục
-
-Chạy từ thư mục gốc project:
-
+**Task 1-2:**
 ```bash
-cd "/home/pearspringmind/Studying/Big Data/Lab03/Lab03_BigData"
-mkdir -p data/input data/output
+spark-shell -i <(echo ':load src/Task_1-2/src/main/scala/Task1_2.scala
+Task1_2.main(Array("Amazon Sale Report.csv", "data/output/Task_1-2.csv"))
+sys.exit(0)')
 ```
 
-Đặt file dataset vào:
-
+**Task 2-1:**
 ```bash
-data/input/Amazon Sale Report.csv
+spark-shell -i <(echo ':load src/Task_2-1/src/main/scala/Task2_1.scala
+Task2_1.main(Array("Amazon Sale Report.csv", "data/output/Task_2-1.parquet"))
+sys.exit(0)')
 ```
 
-## 4. Compile Một Task
-
-Cú pháp chung:
-
+**Task 2-2:**
 ```bash
-TASK_NAME="task11"
-SOURCE_FILE="src/Task_1-1/src/main/scala/Task1_1.scala"
-
-rm -rf "/tmp/lab03-${TASK_NAME}-classes" "/tmp/lab03-${TASK_NAME}.jar"
-mkdir -p "/tmp/lab03-${TASK_NAME}-classes"
-
-scalac -classpath "/home/pearspringmind/opt/spark/jars/*" \
-  -d "/tmp/lab03-${TASK_NAME}-classes" \
-  "$SOURCE_FILE"
-
-jar cf "/tmp/lab03-${TASK_NAME}.jar" -C "/tmp/lab03-${TASK_NAME}-classes" .
+spark-shell -i <(echo ':load src/Task_2-2/src/main/scala/Task2_2.scala
+Task2_2.main(Array("Amazon Sale Report.csv", "data/output/Task_2-2.parquet"))
+sys.exit(0)')
 ```
 
-Đổi `TASK_NAME` và `SOURCE_FILE` tương ứng khi compile task khác.
+---
 
-## 5. Chạy Các Task
+## 4. Kết Quả Đầu Ra (Output)
 
-### Task 1-1
+Sau khi chạy xong, tất cả kết quả sẽ được tạo tự động trong thư mục `data/output/`:
+1. `Task_1-1.csv` (1 file duy nhất)
+2. `Task_1-2.csv` (1 file duy nhất)
+3. `Task_2-1.parquet` (1 file duy nhất)
+4. `Task_2-2.parquet` (1 file duy nhất)
 
-```bash
-TASK_NAME="task11"
-SOURCE_FILE="src/Task_1-1/src/main/scala/Task1_1.scala"
-
-rm -rf "/tmp/lab03-${TASK_NAME}-classes" "/tmp/lab03-${TASK_NAME}.jar"
-mkdir -p "/tmp/lab03-${TASK_NAME}-classes"
-scalac -classpath "/home/pearspringmind/opt/spark/jars/*" \
-  -d "/tmp/lab03-${TASK_NAME}-classes" \
-  "$SOURCE_FILE"
-jar cf "/tmp/lab03-${TASK_NAME}.jar" -C "/tmp/lab03-${TASK_NAME}-classes" .
-
-spark-submit \
-  --class Task1_1 \
-  --master local[*] \
-  "/tmp/lab03-${TASK_NAME}.jar" \
-  "data/input/Amazon Sale Report.csv" \
-  "data/output/Task_1-1.csv"
-```
-
-### Task 1-2
-
-```bash
-TASK_NAME="task12"
-SOURCE_FILE="src/Task_1-2/src/main/scala/Task1_2.scala"
-
-rm -rf "/tmp/lab03-${TASK_NAME}-classes" "/tmp/lab03-${TASK_NAME}.jar"
-mkdir -p "/tmp/lab03-${TASK_NAME}-classes"
-scalac -classpath "/home/pearspringmind/opt/spark/jars/*" \
-  -d "/tmp/lab03-${TASK_NAME}-classes" \
-  "$SOURCE_FILE"
-jar cf "/tmp/lab03-${TASK_NAME}.jar" -C "/tmp/lab03-${TASK_NAME}-classes" .
-
-spark-submit \
-  --class Task1_2 \
-  --master local[*] \
-  "/tmp/lab03-${TASK_NAME}.jar"
-```
-
-### Task 2-1
-
-```bash
-TASK_NAME="task21"
-SOURCE_FILE="src/Task_2-1/src/main/scala/Task2_1.scala"
-
-rm -rf "/tmp/lab03-${TASK_NAME}-classes" "/tmp/lab03-${TASK_NAME}.jar"
-mkdir -p "/tmp/lab03-${TASK_NAME}-classes"
-scalac -classpath "/home/pearspringmind/opt/spark/jars/*" \
-  -d "/tmp/lab03-${TASK_NAME}-classes" \
-  "$SOURCE_FILE"
-jar cf "/tmp/lab03-${TASK_NAME}.jar" -C "/tmp/lab03-${TASK_NAME}-classes" .
-
-spark-submit \
-  --class Task2_1 \
-  --master local[*] \
-  "/tmp/lab03-${TASK_NAME}.jar"
-```
-
-### Task 2-2
-
-```bash
-TASK_NAME="task22"
-SOURCE_FILE="src/Task_2-2/src/main/scala/Task2_2.scala"
-
-rm -rf "/tmp/lab03-${TASK_NAME}-classes" "/tmp/lab03-${TASK_NAME}.jar"
-mkdir -p "/tmp/lab03-${TASK_NAME}-classes"
-scalac -classpath "/home/pearspringmind/opt/spark/jars/*" \
-  -d "/tmp/lab03-${TASK_NAME}-classes" \
-  "$SOURCE_FILE"
-jar cf "/tmp/lab03-${TASK_NAME}.jar" -C "/tmp/lab03-${TASK_NAME}-classes" .
-
-spark-submit \
-  --class Task2_2 \
-  --master local[*] \
-  "/tmp/lab03-${TASK_NAME}.jar"
-```
-
-## 6. Kiểm Tra Output
-
-Liệt kê các file kết quả:
-
-```bash
-find data/output -maxdepth 1 -mindepth 1 -printf "%f\n" | sort
-```
-
-Kết quả cuối cùng cần có theo đề:
-
-```text
-Task_1-1.csv
-Task_1-2.csv
-Task_2-1.parquet
-Task_2-2.parquet
-```
-
-Kiểm tra nhanh Task 1-1:
-
-```bash
-sed -n '1,10p' data/output/Task_1-1.csv
-wc -l data/output/Task_1-1.csv
-```
-
-Header đúng của Task 1-1:
-
-```csv
-ship-state,date,most_bought_size,max_quantity
-```
-
-## 7. Ghi Chú Kỹ Thuật
-
-- Task 1-1 thuộc nhóm Advanced MapReduce, nên mã nguồn dùng RDD/MapReduce-style: `mapPartitions`, `flatMap`, `reduceByKey`, `sortBy`, `saveAsTextFile`.
-- Task 2-1 và Task 2-2 thuộc nhóm Spark Structured APIs, nên khi hoàn thiện cần dùng DataFrame/Dataset API và không dùng Spark SQL string query làm logic chính.
-- Output theo yêu cầu phải là file đơn lẻ đọc được trên filesystem bình thường, không phải thư mục chứa nhiều `part-*`.
-- Nếu `spark-submit` báo lỗi socket trong môi trường sandbox, hãy chạy lệnh trong terminal thật của máy. Spark local cần mở driver socket nội bộ để thực thi job.
+Các file này đều hoàn toàn tuân thủ **Output Schema** đã được thống nhất của nhóm. Mọi giá trị kiểu số thập phân (`Double`) đều đã được làm tròn chính xác 4 chữ số thập phân (`.4f`).

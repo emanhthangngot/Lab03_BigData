@@ -106,6 +106,7 @@ object Task2_2 {
       .master("local[*]")
       .config("spark.sql.shuffle.partitions", "8")    // tuned for local + moderate data
       .config("spark.sql.adaptive.enabled", "true")   // AQE for auto-optimisation
+      .config("spark.hadoop.fs.defaultFS", "file:///")
       .getOrCreate()
 
     spark.sparkContext.setLogLevel("WARN")

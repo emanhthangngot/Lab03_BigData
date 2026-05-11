@@ -1,9 +1,4 @@
-# Data and outputs
-*.csv
-*.parquet
-dataset/
-Lab03/
-output/
+
 
 # IDEs
 .idea/
