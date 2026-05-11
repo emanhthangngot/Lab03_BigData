@@ -1,4 +1,3 @@
-import com.univocity.parsers.csv.{CsvParser, CsvParserSettings}
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -40,17 +39,44 @@ object Task1_1 {
   private case class RequiredColumns(date: Int, status: Int, qty: Int, size: Int, state: Int)
   private case class Purchase(orderEpochDay: Long, state: String, size: String, qty: Int)
 
-  private def newCsvParser(): CsvParser = {
-    val settings = new CsvParserSettings()
-    settings.setLineSeparatorDetectionEnabled(true)
-    settings.setIgnoreLeadingWhitespaces(false)
-    settings.setIgnoreTrailingWhitespaces(false)
-    new CsvParser(settings)
-  }
-
+  /** 
+   * Custom CSV Line Parser to avoid external libraries like univocity.
+   * Handles quoted fields and commas inside quotes.
+   */
   private def parseCsvLine(line: String): Array[String] = {
-    val parsed = newCsvParser().parseLine(line)
-    if (parsed == null) Array.empty[String] else parsed
+    val buf = scala.collection.mutable.ArrayBuffer.empty[String]
+    var inQuotes = false
+    var currentField = new java.lang.StringBuilder()
+    var i = 0
+    
+    while (i < line.length) {
+      val c = line.charAt(i)
+      if (inQuotes) {
+        if (c == '"') {
+          if (i + 1 < line.length && line.charAt(i + 1) == '"') {
+             // Escaped quote: ""
+             currentField.append('"')
+             i += 1
+          } else {
+             inQuotes = false
+          }
+        } else {
+          currentField.append(c)
+        }
+      } else {
+        if (c == '"') {
+          inQuotes = true
+        } else if (c == ',') {
+          buf += currentField.toString
+          currentField.setLength(0)
+        } else {
+          currentField.append(c)
+        }
+      }
+      i += 1
+    }
+    buf += currentField.toString
+    buf.toArray
   }
 
   private def parseDate(value: String): Option[LocalDate] = {
@@ -124,8 +150,6 @@ object Task1_1 {
     fs.rename(partFile, outputPath)
     fs.delete(tempPath, true)
 
-    // Hadoop LocalFileSystem can create a hidden checksum sidecar. The lab asks
-    // for one readable CSV file, so remove the checksum if it appears.
     val parent = Option(outputPath.getParent).getOrElse(new Path("."))
     val checksumPath = new Path(parent, "." + outputPath.getName + ".crc")
     if (fs.exists(checksumPath)) fs.delete(checksumPath, false)
@@ -138,8 +162,6 @@ object Task1_1 {
     val spark = SparkSession.builder()
       .appName("Task 1-1: Most Bought Size by State (Sliding Window MapReduce)")
       .master("local[*]")
-      // Keep all input/output paths on the normal local filesystem even when a
-      // lab machine has HDFS configured as Hadoop's default filesystem.
       .config("spark.hadoop.fs.defaultFS", "file:///")
       .getOrCreate()
 
@@ -148,23 +170,21 @@ object Task1_1 {
       sc.setLogLevel("WARN")
 
       val lines = sc.textFile(inputPath)
-      val header = parseCsvLine(lines.first())
+      val headerStr = lines.first()
+      val header = parseCsvLine(headerStr)
       val columns = requireTaskColumns(header)
       val broadcastColumns = sc.broadcast(columns)
 
-      // Drop the first physical line only. The remaining RDD is the raw dataset
-      // processed in MapReduce style.
       val dataLines = lines.mapPartitionsWithIndex { case (partitionIndex, iterator) =>
         if (partitionIndex == 0) iterator.drop(1) else iterator
       }
 
       val parsedRows = dataLines.mapPartitions { iterator =>
-        val parser = newCsvParser()
         val col = broadcastColumns.value
 
         iterator.flatMap { line =>
-          val fields = parser.parseLine(line)
-          if (fields == null) {
+          val fields = parseCsvLine(line)
+          if (fields.length == 0) {
             Iterator.empty
           } else {
             val state = field(fields, col.state).trim
@@ -178,22 +198,16 @@ object Task1_1 {
         }
       }
 
-      // The sliding window advances one calendar day at a time over the whole
-      // dataset date span. This can create output dates that did not appear as
-      // order dates, which matches the official PDF note about unseen timestamps.
       val allEpochDays = parsedRows.map(_._1)
       val minEpochDay = allEpochDays.min()
       val maxEpochDay = allEpochDays.max()
 
-      // MAP 1: keep only rows that are true purchases for this query.
       val purchases = parsedRows.flatMap { case (epochDay, state, size, status, qtyText) =>
         parsePositiveInt(qtyText).filter(_ => status.contains("shipped")).flatMap { qty =>
           if (state.nonEmpty && size.nonEmpty) Some(Purchase(epochDay, state, size, qty)) else None
         }
       }
 
-      // MAP 2: an order on day t contributes to target days t+1 through t+7.
-      // For each emitted key, the target day d will count this order in [d-7,d-1].
       val windowContributions = purchases.flatMap { purchase =>
         (1L to 7L).iterator.flatMap { offset =>
           val targetDay = purchase.orderEpochDay + offset
@@ -205,12 +219,8 @@ object Task1_1 {
         }
       }
 
-      // REDUCE 1: total quantity per (state, sliding day, size).
       val sizeTotals = windowContributions.reduceByKey(_ + _)
 
-      // MAP 3 + REDUCE 2: choose the size with the maximum quantity per
-      // (state, sliding day). Ties are resolved lexicographically by size to make
-      // the output deterministic across repeated runs.
       val winners = sizeTotals
         .map { case ((state, day, size), totalQty) => ((state, day), (size, totalQty)) }
         .reduceByKey { (left: (String, Int), right: (String, Int)) =>
