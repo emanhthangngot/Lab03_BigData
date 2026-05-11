@@ -215,9 +215,10 @@ object Task2_1 {
       // Spark writes a directory of part files by default. We coalesce to 1
       // partition, write to a temp directory, then rename the single part file
       // to the requested output path.
-      val fs = FileSystem.get(spark.sparkContext.hadoopConfiguration)
-      val finalPath = new Path(outputPath)
-      val tempDir   = new Path(outputPath + ".spark-tmp")
+      val absOutputFile = "file://" + new java.io.File(outputPath).getAbsolutePath
+      val finalPath = new Path(absOutputFile)
+      val tempDir   = new Path(absOutputFile + ".spark-tmp")
+      val fs = tempDir.getFileSystem(spark.sparkContext.hadoopConfiguration)
 
       // Clean up any previous output
       if (fs.exists(tempDir))  fs.delete(tempDir, true)
@@ -249,6 +250,16 @@ object Task2_1 {
       println(s"[Task 2-1] Output written to $outputPath")
 
       // Unpersist the cached DataFrame
+      df.unpersist()
+
+      println("[Task 2-1] Completed successfully.")
+
+    } finally {
+      spark.stop()
+    }
+  }
+}
+ // Unpersist the cached DataFrame
       df.unpersist()
 
       println("[Task 2-1] Completed successfully.")
