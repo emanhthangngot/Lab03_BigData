@@ -3,6 +3,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Column
+import org.apache.hadoop.fs.{FileSystem, Path}
 
 /**
  * Task 2-2: Standard Deviation of Order Amount by SKU-Month
@@ -21,10 +22,10 @@ import org.apache.spark.sql.Column
  * Output schema (Parquet, single file):
  *   SKU                (String)
  *   month              (String, format "YYYY-MM")
- *   p90_stddev_approx  (Double, rounded to 4 dp)
- *   p90_stddev_exact   (Double, rounded to 4 dp)
- *   p80_stddev_approx  (Double, rounded to 4 dp)
- *   p80_stddev_exact   (Double, rounded to 4 dp)
+ *   p90_stddev_approx  (Double)
+ *   p90_stddev_exact   (Double)
+ *   p80_stddev_approx  (Double)
+ *   p80_stddev_exact   (Double)
  *
  * Author : Nguyen Ho Anh Tuan (23120185) — Member D
  * Dataset: Amazon Sale Report (asr.csv)
@@ -48,9 +49,51 @@ object Task2_2 {
       .withColumn(
         colAlias,
         when(col("_cnt") < 2, lit(0.0))
-          .otherwise(round(col("_raw_std"), 4))
+          .otherwise(col("_raw_std"))
       )
       .select("SKU", "month", colAlias)
+  }
+
+  private def writeParquetOutput(
+    df: org.apache.spark.sql.DataFrame,
+    outputPath: String,
+    spark: SparkSession
+  ): Unit = {
+    val outputIsFile = outputPath.toLowerCase.endsWith(".parquet")
+    if (!outputIsFile) {
+      df.coalesce(1).write.mode("overwrite").parquet(outputPath)
+      return
+    }
+
+    val tmpDir = outputPath + "_tmp"
+    val conf = spark.sparkContext.hadoopConfiguration
+    val fs = FileSystem.get(conf)
+    val tmpPath = new Path(tmpDir)
+    val outPath = new Path(outputPath)
+
+    if (fs.exists(tmpPath)) fs.delete(tmpPath, true)
+    if (fs.exists(outPath)) fs.delete(outPath, true)
+
+    val parent = outPath.getParent
+    if (parent != null && !fs.exists(parent)) {
+      fs.mkdirs(parent)
+    }
+
+    df.coalesce(1).write.mode("overwrite").parquet(tmpDir)
+
+    val partFile = fs.listStatus(tmpPath)
+      .find { status =>
+        val name = status.getPath.getName
+        status.isFile && name.startsWith("part-") && name.endsWith(".parquet")
+      }
+      .getOrElse(throw new RuntimeException(s"No parquet part file found in $tmpDir"))
+      .getPath
+
+    if (!fs.rename(partFile, outPath)) {
+      throw new RuntimeException(s"Failed to move $partFile to $outputPath")
+    }
+
+    fs.delete(tmpPath, true)
   }
 
   def main(args: Array[String]): Unit = {
@@ -72,7 +115,7 @@ object Task2_2 {
     val inputPath  = if (args.length > 0) args(0)
                      else "data/input/Amazon Sale Report.csv"
     val outputPath = if (args.length > 1) args(1)
-                     else "output/Task_2-2_out"
+                     else "data/output/Task_2-2.parquet"
 
     println(s"[Task2-2] Input  : $inputPath")
     println(s"[Task2-2] Output : $outputPath")
@@ -286,11 +329,7 @@ object Task2_2 {
     // Output is readable by both Pandas (pd.read_parquet) and Spark local mode.
     // =========================================================================
     println("[Task2-2] Writing output ...")
-    resultDf
-      .coalesce(1)
-      .write
-      .mode("overwrite")
-      .parquet(outputPath)
+    writeParquetOutput(resultDf, outputPath, spark)
 
     println(s"[Task2-2] Done. Total (SKU, month) groups: ${resultDf.count()}")
     println(s"[Task2-2] Output written to: $outputPath")
