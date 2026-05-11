@@ -3,6 +3,7 @@
 *.parquet
 dataset/
 Lab03/
+output/
 
 # IDEs
 .idea/
