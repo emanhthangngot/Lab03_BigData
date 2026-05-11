@@ -259,13 +259,3 @@ object Task2_1 {
     }
   }
 }
- // Unpersist the cached DataFrame
-      df.unpersist()
-
-      println("[Task 2-1] Completed successfully.")
-
-    } finally {
-      spark.stop()
-    }
-  }
-}
