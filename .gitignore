@@ -12,3 +12,5 @@ project/target/
 .metals/
 .scala_dependencies
 project/project/
+data/input/
+data/output/
