@@ -1,0 +1,107 @@
+%================================================
+% TASK 1.2
+%================================================
+\section{Task 1.2: State-level Median Variety per Month}
+
+\subsection*{Hướng dẫn điền nhanh cho người phụ trách}
+Người phụ trách Task 1.2 cần điền đủ bốn nhóm nội dung: cách hiểu truy vấn, phân rã MapReduce, chiến lược triển khai bằng Scala, và kết quả kiểm chứng. Không cần viết lại đề bài dài; chỉ cần mô tả cách nhóm hiểu và cách code hiện thực hóa yêu cầu.
+
+\begin{itemize}
+    \item Điền đúng file nguồn: \texttt{src/Task\_1-2/src/main/scala/Task1\_2.scala}.
+    \item Điền lệnh chạy thực tế đã dùng để tạo \texttt{data/output/Task\_1-2.csv}.
+    \item Điền số dòng output, vài dòng mẫu, và một ví dụ kiểm chứng thủ công.
+    \item Thêm ảnh vào thư mục \texttt{img/1-2} theo các tên gợi ý ở cuối section.
+\end{itemize}
+
+\subsection{Phân tích truy vấn (Query Analysis)}
+\textbf{Mục tiêu cần viết.} Trình bày rằng với mỗi \texttt{ship-state} và mỗi tháng, ta cần tính median của ``variety'' trên các style thỏa điều kiện đã phục vụ ít nhất một size từ XXL trở lên.
+
+\textbf{Cần định nghĩa rõ variety.} Ghi chính xác: variety của một style trong phạm vi \texttt{(state, month)} là số lượng \texttt{SKU} phân biệt của style đó trong cùng phạm vi. Nhấn mạnh variety không phải số order và không phải số size.
+
+\textbf{Cần định nghĩa style qualify.} Ghi rõ style qualify nếu trong cùng \texttt{(state, month, style)} có ít nhất một record có size từ XXL trở lên. Nêu danh sách size code hỗ trợ trong code, ví dụ \texttt{XXL}, \texttt{2XL}, \texttt{XXXL}, \texttt{3XL}, \texttt{4XL}, \texttt{5XL}, \texttt{6XL}. Nếu code có regex cho các size lớn hơn, mô tả thêm.
+
+\textbf{Điểm dễ sai cần giải thích.} Sau khi style qualify, variety vẫn phải đếm tất cả SKU của style trong tháng và state đó, kể cả SKU size nhỏ hơn XXL. Điều kiện XXL chỉ dùng để quyết định style có được đưa vào tập tính median hay không.
+
+\textbf{Median cần ghi.} Mô tả cách tính median: nếu số style lẻ thì lấy phần tử giữa sau khi sort; nếu chẵn thì lấy trung bình hai phần tử giữa. Ghi rõ output làm tròn bao nhiêu chữ số thập phân nếu có.
+
+\textbf{Schema cần điền.} Điền schema cuối cùng của \texttt{Task\_1-2.csv}:
+\begin{itemize}
+    \item \texttt{ship-state}: state đã chuẩn hóa theo code.
+    \item \texttt{month}: định dạng tháng, ví dụ \texttt{YYYY-MM}.
+    \item \texttt{median\_variety}: median variety của các qualifying styles.
+\end{itemize}
+
+\subsection{Phân rã thành các bước cơ bản (Decomposition)}
+Điền theo cấu trúc dưới đây, mỗi bước nên có 2--4 câu: bước làm gì, key/value là gì, và vì sao cần bước đó.
+
+\begin{enumerate}
+    \item \textbf{Đọc input và chọn cột.} Ghi các cột dùng: \texttt{Date}, \texttt{SKU}, \texttt{Style}, \texttt{Size}, \texttt{ship-state}. Nêu cách drop null, trim chuỗi và parse tháng.
+    \item \textbf{Map sang khóa style.} Ghi key là \texttt{(state, month, style)}, value là \texttt{(SKU, isAtLeastXXL)}.
+    \item \textbf{Reduce lần 1 để tính variety và cờ XXL.} Ghi cách gom \texttt{SKU} vào set để đếm distinct, đồng thời OR các giá trị \texttt{isAtLeastXXL} thành \texttt{hasXXL}.
+    \item \textbf{Lọc style qualify.} Ghi chỉ giữ style có \texttt{hasXXL = true}; đây là điều kiện của đề bài.
+    \item \textbf{Map sang khóa state-month.} Ghi key là \texttt{(state, month)}, value là \texttt{variety} của style.
+    \item \textbf{Reduce lần 2 để tính median.} Ghi cách gom list variety, sort tăng dần và tính median.
+    \item \textbf{Xuất CSV.} Ghi cách sort output, ghi header và đảm bảo tạo một file CSV thường, không phải thư mục part files.
+\end{enumerate}
+
+\subsection{Lý do phân rã}
+Viết đoạn giải thích vì sao phải tách ``qualify style'' và ``variety''. Gợi ý nội dung: cùng một style có thể có SKU size nhỏ và size lớn; nếu lọc chỉ còn dòng size XXL trước khi đếm variety thì sẽ làm mất SKU size nhỏ và sai định nghĩa variety. Vì vậy reducer đầu tiên phải vừa giữ tập SKU đầy đủ vừa ghi nhận style có từng phục vụ size từ XXL trở lên.
+
+Viết thêm 1 đoạn về MapReduce: bài toán được quy về hai tầng aggregation. Tầng đầu xử lý ở cấp style; tầng thứ hai xử lý ở cấp state-month để tính median. Cách này phù hợp với key-value processing vì mỗi reducer chỉ cần dữ liệu cùng key.
+
+\subsection{Chiến lược thực thi \& Triển khai mã nguồn}
+\textbf{Điền lệnh chạy.}
+\begin{lstlisting}[language=bash]
+TODO: Điền lệnh chạy Task 1.2 thực tế.
+\end{lstlisting}
+
+\textbf{Điền snippet size threshold.} Chèn hàm hoặc đoạn code xác định \texttt{isAtLeastXXL}. Sau snippet, giải thích mapping size và regex nếu có.
+
+\textbf{Điền snippet map/reduce variety.} Chèn đoạn code emit \texttt{((state, month, style), (sku, isXXL))} và đoạn \texttt{aggregateByKey}/\texttt{reduceByKey} dùng set SKU.
+
+\textbf{Điền snippet median.} Chèn hàm \texttt{computeMedian} hoặc đoạn sort list variety và tính median.
+
+\textbf{Điền xử lý dữ liệu lỗi.} Ghi cách code xử lý date parse lỗi, null, empty \texttt{SKU}/\texttt{Style}/\texttt{ship-state}, và vì sao cách đó không làm sai output.
+
+\subsection{Kết quả thực thi \& Xuất dữ liệu}
+\textbf{Điền thông tin output.}
+\begin{itemize}
+    \item Đường dẫn output: \texttt{data/output/Task\_1-2.csv}.
+    \item Số dòng bao gồm header: TODO.
+    \item Số dòng kết quả không tính header: TODO.
+    \item Kích thước file: TODO.
+\end{itemize}
+
+\textbf{Điền sample output.}
+\begin{lstlisting}[language={}]
+TODO: Dán 5-10 dòng đầu của Task_1-2.csv.
+\end{lstlisting}
+
+\textbf{Điền kiểm chứng thủ công.} Chọn một \texttt{state-month} có ít nhất vài style. Tạo bảng gồm \texttt{style}, danh sách SKU distinct hoặc số SKU distinct, có size từ XXL trở lên hay không, variety. Sau đó sort các variety của style qualify và tính median để đối chiếu với output.
+
+\subsection{Minh chứng bằng hình ảnh}
+Thêm ảnh vào thư mục \texttt{img/1-2} theo các tên sau. Nếu chưa thêm ảnh, LaTeX sẽ hiển thị khung nhắc.
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/1-2/run_success.png}
+    {\includegraphics[width=0.9\textwidth]{img/1-2/run_success.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh chạy thành công tại \texttt{img/1-2/run\_success.png}}}}
+    \caption{Kết quả chạy chương trình Task 1.2}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/1-2/output_preview.png}
+    {\includegraphics[width=0.9\textwidth]{img/1-2/output_preview.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh preview output tại \texttt{img/1-2/output\_preview.png}}}}
+    \caption{Một phần nội dung file \texttt{Task\_1-2.csv}}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/1-2/manual_check.png}
+    {\includegraphics[width=0.9\textwidth]{img/1-2/manual_check.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh kiểm chứng thủ công tại \texttt{img/1-2/manual\_check.png}}}}
+    \caption{Kiểm chứng thủ công median variety cho một state-month mẫu}
+\end{figure}

@@ -1,0 +1,162 @@
+%================================================
+% TASK 2.2
+%================================================
+\section{Task 2.2: StdDev of Amount by SKU-Month with Percentile Threshold}
+
+\subsection*{Hướng dẫn điền nhanh cho người phụ trách}
+Task 2.2 cần trình bày hai pipeline percentile: approximate bằng hàm built-in và exact tự cài bằng DataFrame/Dataset operations. Phần quan trọng nhất của báo cáo là so sánh accuracy, thời gian chạy, và các nhóm \texttt{SKU-month} mà hai cách chọn order khác nhau.
+
+\begin{itemize}
+    \item File nguồn cần tham chiếu: \texttt{src/Task\_2-2/src/main/scala/Task2\_2.scala}.
+    \item Phải nêu rõ \texttt{stddev\_pop} là population standard deviation, degree of freedom bằng 0.
+    \item Phải có benchmark ít nhất 5 lần cho mỗi approach và report mean cùng standard deviation.
+    \item Phải kiểm tra có nhóm \texttt{SKU-month} nào trên 1,000 orders hay không để thảo luận partitioning.
+    \item Thêm ảnh vào thư mục \texttt{img/2-2} theo các tên gợi ý cuối section.
+\end{itemize}
+
+\subsection{Phân tích truy vấn (Query Analysis)}
+\textbf{Mục tiêu cần viết.} Trình bày rằng với mỗi \texttt{SKU} trong từng tháng, ta giữ lại các order có số promotion đạt ngưỡng percentile P90 hoặc P80 của chính nhóm \texttt{(SKU, month)}, rồi tính population standard deviation của \texttt{Amount} trên tập order được giữ.
+
+\textbf{Promotion count cần viết.} Ghi cách đếm promotion ids: split cột \texttt{promotion-ids} theo dấu phẩy, trim token, bỏ token rỗng, đếm tất cả promotion bao gồm Amazon-issued promotions. Null hoặc chuỗi rỗng được tính là 0.
+
+\textbf{Percentile threshold cần viết.} Ghi rõ threshold được tính riêng cho từng \texttt{SKU-month}. Một order qualify nếu \texttt{promo\_count >= threshold}. Tránh viết như ngưỡng toàn dataset.
+
+\textbf{Stddev cần viết.} Ghi rõ dùng \texttt{stddev\_pop}, tức chia cho $N$ thay vì $N-1$. Nếu sau khi lọc percentile có ít hơn 2 order thì stddev được set bằng 0 theo yêu cầu đề bài.
+
+\textbf{Hai approach cần viết.}
+\begin{itemize}
+    \item Approximate: dùng \texttt{percentile\_approx} hoặc \texttt{approx\_percentile}.
+    \item Exact: tự tính bằng DataFrame/Dataset operations, ví dụ window \texttt{row\_number}, \texttt{count}, vị trí \texttt{ceil(p * N)}.
+\end{itemize}
+
+\textbf{Schema cần điền.} Theo output schema hiện tại:
+\begin{itemize}
+    \item \texttt{SKU}
+    \item \texttt{month}
+    \item \texttt{p90\_stddev\_approx}
+    \item \texttt{p90\_stddev\_exact}
+    \item \texttt{p80\_stddev\_approx}
+    \item \texttt{p80\_stddev\_exact}
+\end{itemize}
+
+\subsection{Phân rã thành các bước cơ bản (Decomposition)}
+Điền từng bước theo pipeline dưới đây. Với mỗi bước, ghi rõ DataFrame tương ứng trong code nếu có.
+
+\begin{enumerate}
+    \item \textbf{Load CSV và chọn cột.} Ghi các cột cần dùng: \texttt{SKU}, \texttt{Date}, \texttt{promotion-ids}, \texttt{Amount}. Nêu cách cast \texttt{Amount} sang Double.
+    \item \textbf{Parse month.} Ghi cách parse nhiều format ngày và tạo cột \texttt{month = yyyy-MM}.
+    \item \textbf{Tính \texttt{promo\_count}.} Ghi cách split, filter token rỗng và count; null/rỗng thành 0.
+    \item \textbf{Tạo base DataFrame.} Ghi base gồm \texttt{SKU}, \texttt{month}, \texttt{promo\_count}, \texttt{amount\_val}, và được cache vì dùng cho cả hai approach.
+    \item \textbf{Approximate thresholds.} Ghi groupBy \texttt{SKU, month}, tính P90/P80 bằng built-in, join threshold lại base, lọc order qualify và tính stddev.
+    \item \textbf{Exact thresholds.} Ghi window partition by \texttt{SKU, month}, order by \texttt{promo\_count}, gán \texttt{row\_number}, tính \texttt{total\_n}, lấy vị trí \texttt{ceil(p * N)} và threshold tương ứng.
+    \item \textbf{Tính stddev và xử lý nhóm nhỏ.} Ghi groupBy \texttt{SKU, month}, count qualifying orders, dùng \texttt{stddev\_pop}; nếu count nhỏ hơn 2 thì trả 0.
+    \item \textbf{Ghép kết quả cuối.} Ghi join các DataFrame kết quả P90/P80 approximate/exact về cùng schema.
+    \item \textbf{Ghi single Parquet.} Ghi cách coalesce/write temp directory/rename file nếu code làm như vậy.
+\end{enumerate}
+
+\subsection{Lý do phân rã}
+Viết đoạn giải thích vì sao phải tính \texttt{promo\_count} trước: percentile không tính trên Amount mà tính trên số lượng promotions của order. Sau khi có threshold mới lọc order và tính stddev trên Amount.
+
+Viết đoạn giải thích vì sao threshold phải join lại base DataFrame: threshold là thuộc tính cấp nhóm, còn quyết định order qualify là thuộc tính từng dòng order.
+
+Viết đoạn giải thích vì sao cần hai approach: approximate nhanh và tận dụng built-in aggregation; exact tốn sort/window nhưng cho threshold tái lập chính xác theo quy ước nearest-rank.
+
+\subsection{Chiến lược thực thi \& Triển khai mã nguồn}
+\textbf{Điền lệnh chạy.}
+\begin{lstlisting}[language=bash]
+TODO: Điền lệnh chạy Task 2.2 thực tế.
+\end{lstlisting}
+
+\textbf{Điền snippet base DataFrame.} Chèn đoạn code đọc CSV, parse month, cast Amount và tính \texttt{promo\_count}.
+
+\textbf{Điền snippet approximate.} Chèn đoạn code \texttt{percentile\_approx}, join threshold, filter \texttt{promo\_count >= threshold} và tính stddev.
+
+\textbf{Điền snippet exact.} Chèn đoạn code window \texttt{row\_number}, \texttt{count}, \texttt{ceil(p * N)} và lấy threshold.
+
+\textbf{Điền snippet output.} Chèn đoạn code join kết quả và ghi Parquet single file.
+
+\subsection{So sánh hai phương pháp Percentile}
+\textbf{Accuracy cần điền.} Tạo bảng so sánh threshold và stddev giữa approximate và exact. Bảng tối thiểu nên có:
+\begin{center}
+\begin{tabular}{llllllll}
+\toprule
+\textbf{SKU} & \textbf{Month} & \textbf{P90 approx} & \textbf{P90 exact} & \textbf{P80 approx} & \textbf{P80 exact} & \textbf{Diff} & \textbf{Ghi chú} \\
+\midrule
+TODO & TODO & TODO & TODO & TODO & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Execution time cần điền.} Benchmark ít nhất 5 lần. Ghi rõ cách đo: đo riêng approximate, exact, hay đo toàn pipeline; nếu đo bằng log, nêu vị trí log.
+\begin{center}
+\begin{tabular}{lccc}
+\toprule
+\textbf{Approach} & \textbf{Run count} & \textbf{Mean time (s)} & \textbf{Stddev (s)} \\
+\midrule
+Approximate percentile & TODO & TODO & TODO \\
+Exact percentile & TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Qualifying-order differences cần điền.} Liệt kê các nhóm \texttt{SKU-month} mà approximate và exact cho threshold khác nhau hoặc chọn tập order khác nhau. Với mỗi nhóm, ghi:
+\begin{itemize}
+    \item Số order trong nhóm.
+    \item Threshold approximate và exact.
+    \item Số order qualify của từng cách.
+    \item Ảnh hưởng đến stddev Amount.
+\end{itemize}
+
+\textbf{Nhận xét cần viết.} Kết luận approach nào nhanh hơn, sai lệch có đáng kể không, và trong trường hợp nào exact đáng dùng hơn approximate.
+
+\subsection{Thảo luận về Phân mảnh dữ liệu (Partitioning Strategy)}
+\textbf{Kiểm tra nhóm lớn.} Điền kết quả query đếm số order theo \texttt{SKU-month}. Nếu có nhóm trên 1,000 orders, liệt kê top 5 nhóm lớn nhất.
+
+\textbf{Manual repartitioning.} Ghi nhận định có nên \texttt{repartition("SKU", "month")} hay không. Nếu dataset nhỏ hoặc group không lớn, giải thích vì sao giữ default hoặc số partition thấp là hợp lý. Nếu có skew, giải thích rủi ro một partition bị nặng.
+
+\textbf{Default partition size.} Liên hệ với Spark default partition size khoảng 128 MB: ước lượng kích thước dữ liệu của nhóm lớn nhất và cho biết có đủ lớn để cần can thiệp partition không.
+
+\textbf{Cấu hình thực tế.} Điền cấu hình Spark liên quan, ví dụ \texttt{spark.sql.shuffle.partitions}, AQE bật/tắt, và lý do chọn.
+
+\subsection{Kết quả thực thi \& Xuất dữ liệu}
+\textbf{Điền thông tin output.}
+\begin{itemize}
+    \item Đường dẫn output: \texttt{data/output/Task\_2-2.parquet}.
+    \item Số dòng kết quả: TODO.
+    \item Kích thước file: TODO.
+    \item Schema đọc lại bằng Spark/Pandas: TODO.
+\end{itemize}
+
+\textbf{Điền sample output.}
+\begin{lstlisting}[language={}]
+TODO: Dán 5-10 dòng sample từ Task_2-2.parquet.
+\end{lstlisting}
+
+\textbf{Điền kiểm chứng thủ công.} Chọn một \texttt{SKU-month} nhỏ. Ghi danh sách \texttt{promo\_count}, threshold P80/P90, các Amount qualify và phép tính stddev để đối chiếu output.
+
+\subsection{Minh chứng bằng hình ảnh}
+Thêm ảnh vào thư mục \texttt{img/2-2} theo các tên sau.
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/2-2/run_success.png}
+    {\includegraphics[width=0.9\textwidth]{img/2-2/run_success.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh chạy thành công tại \texttt{img/2-2/run\_success.png}}}}
+    \caption{Kết quả chạy chương trình Task 2.2}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/2-2/benchmark.png}
+    {\includegraphics[width=0.9\textwidth]{img/2-2/benchmark.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh benchmark tại \texttt{img/2-2/benchmark.png}}}}
+    \caption{Benchmark giữa approximate và exact percentile}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/2-2/output_preview.png}
+    {\includegraphics[width=0.9\textwidth]{img/2-2/output_preview.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh preview output tại \texttt{img/2-2/output\_preview.png}}}}
+    \caption{Một phần nội dung file \texttt{Task\_2-2.parquet}}
+\end{figure}

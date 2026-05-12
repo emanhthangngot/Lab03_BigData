@@ -1,0 +1,147 @@
+%================================================
+% TASK 2.1
+%================================================
+\section{Task 2.1: Percentage of Cancelled Orders per City}
+
+\subsection*{Hướng dẫn điền nhanh cho người phụ trách}
+Task 2.1 có nhiều yêu cầu bắt buộc hơn hai task MapReduce. Người phụ trách cần điền đủ phần logic, code DataFrame/Dataset API, output, và đặc biệt là phân tích execution plan.
+
+\begin{itemize}
+    \item File nguồn cần tham chiếu: \texttt{src/Task\_2-1/src/main/scala/Task2\_1.scala}.
+    \item Không mô tả lời giải bằng Spark SQL string query; nhấn mạnh code dùng DataFrame/Dataset API.
+    \item Bắt buộc dán \texttt{explain(true)} đầy đủ hoặc phần plan đủ để thấy parsed/analyzed/optimized/physical plan.
+    \item Bắt buộc đếm join strategy, số node \texttt{Exchange}, và số stages từ Spark UI/log.
+    \item Thêm ảnh vào thư mục \texttt{img/2-1} theo các tên gợi ý cuối section.
+\end{itemize}
+
+\subsection{Phân tích truy vấn (Query Analysis)}
+\textbf{Mục tiêu cần viết.} Trình bày rằng bài toán tính phần trăm đơn cancelled theo city trong tập order thỏa đồng thời ba điều kiện: service level Standard, có ít nhất 3 promotion hợp lệ theo thời gian, và Amount nhỏ hơn average Amount của merchant-fulfillment shipped orders trong cùng state.
+
+\textbf{Điều kiện 1 cần viết.} Nêu cách chuẩn hóa và lọc \texttt{ship-service-level = Standard}. Nếu code dùng dạng \texttt{lower(trim(column))}, ghi rõ để tránh sai do khoảng trắng/chữ hoa.
+
+\textbf{Điều kiện 2 cần viết.} Mô tả chi tiết temporally-valid promotion:
+\begin{itemize}
+    \item Tách \texttt{promotion-ids} theo dấu phẩy.
+    \item Trim từng promotion id, bỏ token rỗng.
+    \item Tính \texttt{first\_date} và \texttt{last\_date} của từng promotion id trên toàn dataset.
+    \item \texttt{active\_days = datediff(last\_date, first\_date)}.
+    \item Promotion hợp lệ nếu \texttt{active\_days >= 2}.
+    \item Order qualify điều kiện này nếu có ít nhất 3 promotion hợp lệ.
+\end{itemize}
+
+\textbf{Điều kiện 3 cần viết.} Mô tả cách tính average Amount theo \texttt{ship-state} trên các dòng có \texttt{Fulfilment = Merchant} và \texttt{Courier Status = Shipped}. Sau đó order đang xét chỉ được giữ nếu \texttt{Amount < merchant\_shipped\_avg} của cùng state.
+
+\textbf{Tỷ lệ cancelled cần viết.} Ghi công thức:
+\[
+\texttt{cancelled\_percentage} =
+\frac{\texttt{cancelled\_orders}}{\texttt{total\_qualified\_orders}} \times 100
+\]
+Nêu rõ code xác định cancelled như thế nào, ví dụ \texttt{Status} bằng hoặc chứa \texttt{cancelled} sau khi chuẩn hóa.
+
+\textbf{Schema cần điền.} Điền schema Parquet thực tế. Theo code hiện tại:
+\begin{itemize}
+    \item \texttt{ship-city}: city.
+    \item \texttt{ship-state}: state, giữ lại để tránh nhập nhằng city trùng tên giữa các state.
+    \item \texttt{cancelled\_percentage}: tỷ lệ phần trăm đã làm tròn.
+\end{itemize}
+
+\subsection{Phân rã thành các bước cơ bản (Decomposition)}
+Mỗi bước dưới đây cần viết 2--5 câu, kèm tên DataFrame trong code nếu có.
+
+\begin{enumerate}
+    \item \textbf{Load CSV và cast type.} Ghi cách đọc CSV header, parse \texttt{Date} thành \texttt{parsed\_date}, cast \texttt{Amount} sang Double, và tạo id dòng nếu code dùng để tránh nhầm sau join.
+    \item \textbf{Explode promotion ids.} Ghi DataFrame chứa \texttt{parsed\_date} và từng \texttt{promo\_id}; giải thích vì sao cần explode để tính active period toàn cục.
+    \item \textbf{Tính valid promotions.} Ghi groupBy \texttt{promo\_id}, lấy min/max date, datediff, lọc \texttt{active\_days >= 2}.
+    \item \textbf{Đếm valid promotions per order.} Ghi code dùng UDF/broadcast set hoặc join để đếm. Nếu dùng broadcast set như code hiện tại, giải thích vì bảng valid promotions đủ nhỏ để broadcast.
+    \item \textbf{Lọc Standard và valid promotion count.} Ghi DataFrame sau điều kiện 1 và 2, kèm số dòng nếu có log.
+    \item \textbf{Tính average Amount theo state.} Ghi filter Merchant + Shipped, groupBy state, avg Amount.
+    \item \textbf{Join và lọc Amount thấp hơn average.} Ghi join giữa orders đã qua điều kiện 1--2 với state average, rồi filter \texttt{Amount < merchant\_shipped\_avg}.
+    \item \textbf{Group theo city-state để tính percentage.} Ghi count tổng, count cancelled, công thức percentage.
+    \item \textbf{Ghi single Parquet.} Ghi cách coalesce/write temp directory/rename part file nếu code làm như vậy.
+\end{enumerate}
+
+\subsection{Lý do phân rã}
+Viết một đoạn giải thích vì sao temporally-valid promotion phải được tính toàn dataset trước khi xét từng order. Đây là thuộc tính của promotion id, không phải thuộc tính cục bộ của một order.
+
+Viết một đoạn giải thích vì sao average Amount phải được tính theo state riêng rồi join lại. Điều kiện thứ ba phụ thuộc vào state của order hiện tại, nên mỗi order cần được so sánh với ngưỡng average tương ứng.
+
+Viết một đoạn giải thích vì sao cách này phù hợp với Spark Structured API: các phép split/explode, groupBy, join, filter, aggregation đều là DataFrame transformations nên Catalyst có thể tối ưu physical plan.
+
+\subsection{Chiến lược thực thi \& Triển khai mã nguồn}
+\textbf{Điền lệnh chạy.}
+\begin{lstlisting}[language=bash]
+TODO: Điền lệnh chạy Task 2.1 thực tế.
+\end{lstlisting}
+
+\textbf{Điền snippet promotion validity.} Chèn đoạn code explode \texttt{promotion-ids}, groupBy \texttt{promo\_id}, tính min/max date và lọc active period.
+
+\textbf{Điền snippet count valid promotions.} Chèn đoạn code UDF/broadcast set hoặc join-based count, tùy đúng với code.
+
+\textbf{Điền snippet state average.} Chèn đoạn code filter \texttt{Fulfilment}/\texttt{Courier Status} và groupBy \texttt{ship-state}.
+
+\textbf{Điền snippet result.} Chèn đoạn code groupBy \texttt{ship-city}, \texttt{ship-state}, count total/cancelled và tính \texttt{cancelled\_percentage}.
+
+\subsection{Phân tích Kế hoạch Thực thi (Execution Plan Analysis)}
+\textbf{Bước 1 -- Dán execution plan.} Chạy chương trình và copy phần \texttt{explain(true)} vào block dưới đây.
+
+\begin{lstlisting}[language={}]
+TODO: Dán output explain(true) của Task 2.1 vào block này.
+\end{lstlisting}
+
+\textbf{Bước 2 -- Liệt kê join strategy.} Điền bảng sau từ physical plan:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Join / operation} & \textbf{Physical strategy} & \textbf{Giải thích} \\
+\midrule
+TODO & TODO & TODO \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Bước 3 -- Đếm Exchange nodes.} Tìm tất cả dòng chứa \texttt{Exchange} trong physical plan. Điền số lượng và giải thích mỗi Exchange phục vụ groupBy, join, sort/orderBy hay coalesce/write.
+
+\textbf{Bước 4 -- Đếm stages.} Lấy số stages từ Spark UI hoặc log chạy. Điền tổng số stages và mô tả ngắn stage nào tương ứng với đọc input, aggregation promotion, aggregation state average, join/filter, aggregation result và ghi output.
+
+\subsection{Kết quả thực thi \& Xuất dữ liệu}
+\textbf{Điền thông tin output.}
+\begin{itemize}
+    \item Đường dẫn output: \texttt{data/output/Task\_2-1.parquet}.
+    \item Số dòng kết quả: TODO.
+    \item Kích thước file: TODO.
+    \item Schema đọc lại bằng Spark/Pandas: TODO.
+\end{itemize}
+
+\textbf{Điền sample output.}
+\begin{lstlisting}[language={}]
+TODO: Dán 5-10 dòng sample từ Parquet.
+\end{lstlisting}
+
+\textbf{Điền kiểm chứng thủ công.} Chọn một city-state trong output. Ghi tổng order qualified, số cancelled, phép tính percentage và đối chiếu với \texttt{cancelled\_percentage}.
+
+\subsection{Minh chứng bằng hình ảnh}
+Thêm ảnh vào thư mục \texttt{img/2-1} theo các tên sau.
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/2-1/run_success.png}
+    {\includegraphics[width=0.9\textwidth]{img/2-1/run_success.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh chạy thành công tại \texttt{img/2-1/run\_success.png}}}}
+    \caption{Kết quả chạy chương trình Task 2.1}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/2-1/explain_plan.png}
+    {\includegraphics[width=0.9\textwidth]{img/2-1/explain_plan.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh execution plan tại \texttt{img/2-1/explain\_plan.png}}}}
+    \caption{Execution plan của Task 2.1}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/2-1/output_preview.png}
+    {\includegraphics[width=0.9\textwidth]{img/2-1/output_preview.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh preview output tại \texttt{img/2-1/output\_preview.png}}}}
+    \caption{Một phần nội dung file \texttt{Task\_2-1.parquet}}
+\end{figure}

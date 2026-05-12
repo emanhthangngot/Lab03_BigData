@@ -1,0 +1,159 @@
+%================================================
+% TASK 1.1
+%================================================
+\section{Task 1.1: Sliding Window -- Most Bought Size per State}
+
+\subsection{Phân tích truy vấn (Query Analysis)}
+Bài toán yêu cầu xác định size được mua nhiều nhất tại từng bang/tỉnh theo từng ngày tính toán $d$. Với mỗi ngày $d$, cửa sổ thời gian chỉ xét tối đa 7 ngày trước đó, tức $[d-7, d-1]$, không bao gồm ngày hiện tại. Vì cửa sổ trượt từng ngày nên output có thể chứa các ngày không có order trực tiếp trong dữ liệu gốc, miễn là các ngày đó nằm trong khoảng ngày của dataset và có dữ liệu quá khứ đóng góp vào cửa sổ.
+
+Một dòng dữ liệu được xem là ``bought'' khi thỏa đồng thời hai điều kiện: cột \texttt{Status} chứa chuỗi \texttt{shipped} sau khi chuẩn hóa chữ hoa/thường, và cột \texttt{Qty} là số nguyên dương. Cách hiểu này bao phủ các trạng thái như \texttt{Shipped}, \texttt{Shipped - Delivered to Buyer}, \texttt{Shipped - Returned to Seller}, đúng với mô tả trong đề bài là status có chứa ``shipped''.
+
+Đơn vị đo ``mua nhiều nhất'' trong lời giải là tổng \texttt{Qty} theo size trong cửa sổ, không chỉ là số dòng order. Với mỗi khóa \texttt{(ship-state, date)}, chương trình so sánh tổng quantity của từng size và chọn size có tổng lớn nhất. Nếu nhiều size có cùng tổng quantity, chương trình phá hòa bằng thứ tự từ điển tăng dần của chuỗi size để kết quả ổn định và tái lập được.
+
+Output của task là một CSV thường trên filesystem, có header và đúng tên \texttt{Task\_1-1.csv}. Schema thực tế:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Cột} & \textbf{Kiểu dữ liệu} & \textbf{Ý nghĩa} \\
+\midrule
+\texttt{ship-state} & String & Bang/tỉnh cần tính toán \\
+\texttt{date} & String & Ngày tính toán $d$, định dạng \texttt{MM-dd-yy} \\
+\texttt{most\_bought\_size} & String & Size có tổng quantity cao nhất trong window \\
+\texttt{max\_quantity} & Integer & Tổng quantity của size thắng trong window \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Phân rã thành các bước cơ bản (Decomposition)}
+Lời giải được triển khai theo tư duy MapReduce trên Spark RDD, gồm các bước sau:
+
+\begin{enumerate}
+    \item \textbf{Đọc và kiểm tra schema input.} Chương trình đọc CSV, parse header và kiểm tra đủ các cột bắt buộc: \texttt{Date}, \texttt{Status}, \texttt{Qty}, \texttt{Size}, \texttt{ship-state}. Nếu thiếu cột, chương trình dừng với thông báo lỗi rõ ràng.
+    \item \textbf{Parse và chuẩn hóa bản ghi.} Mỗi dòng được parse bằng parser CSV tự viết để xử lý dấu phẩy trong quoted fields. Ngày được parse theo các format phổ biến như \texttt{MM-dd-yy}, \texttt{M-d-yy}, \texttt{MM/dd/yy}, \texttt{M/d/yy}; \texttt{Qty} được ép sang số nguyên dương.
+    \item \textbf{Lọc item được mua.} Chỉ giữ các dòng có \texttt{Status} chứa \texttt{shipped}, \texttt{Qty > 0}, đồng thời \texttt{ship-state} và \texttt{Size} không rỗng. Bước này giảm dữ liệu trước khi phát sinh khóa window.
+    \item \textbf{Sinh đóng góp sliding window.} Với một purchase tại ngày $t$, chương trình emit đóng góp cho các ngày tính toán $d = t+1, t+2, \ldots, t+7$. Điều này tương đương với việc purchase tại ngày $t$ nằm trong window quá khứ của các ngày $d$ đó.
+    \item \textbf{Cộng tổng quantity theo \texttt{(state, day, size)}.} Các đóng góp cùng bang, cùng ngày tính toán và cùng size được cộng bằng \texttt{reduceByKey}.
+    \item \textbf{Chọn size thắng theo \texttt{(state, day)}.} Kết quả ở bước trước được đổi khóa thành \texttt{(state, day)}, sau đó reducer chọn size có tổng quantity lớn nhất; nếu hòa thì chọn size có chuỗi nhỏ hơn theo thứ tự từ điển.
+    \item \textbf{Sắp xếp và ghi single CSV.} Kết quả được sort theo \texttt{state} và \texttt{day}, thêm header, \texttt{coalesce(1)} rồi ghi ra thư mục tạm. Sau đó chương trình rename part file thành một file CSV duy nhất.
+\end{enumerate}
+
+\subsection{Lý do phân rã}
+Phần khó nhất của bài toán là sliding window. Nếu tính trực tiếp từng ngày $d$ rồi quét ngược lại 7 ngày, chi phí sẽ lặp lại nhiều lần. Lời giải chọn hướng ngược lại: một order tại ngày $t$ tự phát sinh đóng góp cho tối đa 7 ngày tương lai mà nó có thể thuộc về window. Nhờ vậy, sliding window được chuyển thành bài toán gom nhóm key-value thông thường.
+
+Cách phân rã này phù hợp với MapReduce vì mỗi bước đều có key rõ ràng. Bước map sinh key \texttt{(state, day, size)}; bước reduce đầu cộng quantity; bước reduce thứ hai chọn winner cho từng \texttt{(state, day)}. Việc lọc dữ liệu hợp lệ trước khi phát sinh 7 đóng góp cũng giúp giảm số bản ghi trung gian và giảm chi phí shuffle.
+
+\subsection{Chiến lược thực thi \& Triển khai mã nguồn}
+Task 1.1 được cài đặt trong file \texttt{src/Task\_1-1/src/main/scala/Task1\_1.scala}. Chương trình nhận hai tham số: đường dẫn CSV đầu vào và đường dẫn file CSV đầu ra. Logic chính dùng Spark RDD transformations như \texttt{mapPartitions}, \texttt{flatMap}, \texttt{reduceByKey}, \texttt{sortBy}, \texttt{saveAsTextFile}; không dùng DataFrame query hoặc Spark SQL cho phần tính toán.
+
+\textbf{Lệnh chạy mẫu:}
+\begin{lstlisting}[language=bash]
+spark-submit --class Task1_1 --master local[*] <compiled-jar-or-classes> \
+  "data/input/Amazon Sale Report.csv" \
+  "data/output/Task_1-1.csv"
+\end{lstlisting}
+
+\textbf{Parse và lọc purchase hợp lệ.}
+\begin{lstlisting}[language=Scala]
+val purchases = parsedRows.flatMap { case (epochDay, state, size, status, qtyText) =>
+  parsePositiveInt(qtyText).filter(_ => status.contains("shipped")).flatMap { qty =>
+    if (state.nonEmpty && size.nonEmpty) Some(Purchase(epochDay, state, size, qty))
+    else None
+  }
+}
+\end{lstlisting}
+
+\textbf{Sinh đóng góp cho sliding window.}
+\begin{lstlisting}[language=Scala]
+val windowContributions = purchases.flatMap { purchase =>
+  (1L to 7L).iterator.flatMap { offset =>
+    val targetDay = purchase.orderEpochDay + offset
+    if (targetDay >= minEpochDay && targetDay <= maxEpochDay) {
+      Some(((purchase.state, targetDay, purchase.size), purchase.qty))
+    } else {
+      None
+    }
+  }
+}
+\end{lstlisting}
+
+\textbf{Cộng tổng quantity và chọn size thắng.}
+\begin{lstlisting}[language=Scala]
+val sizeTotals = windowContributions.reduceByKey(_ + _)
+
+val winners = sizeTotals
+  .map { case ((state, day, size), totalQty) => ((state, day), (size, totalQty)) }
+  .reduceByKey { (left, right) =>
+    val (leftSize, leftQty) = left
+    val (rightSize, rightQty) = right
+    if (leftQty > rightQty) left
+    else if (rightQty > leftQty) right
+    else if (leftSize <= rightSize) left
+    else right
+  }
+\end{lstlisting}
+
+\subsection{Kết quả thực thi \& Xuất dữ liệu}
+File output đã được tạo tại \texttt{data/output/Task\_1-1.csv}. File có 4,058 dòng bao gồm header, tương ứng 4,057 dòng kết quả. Một số dòng đầu của output:
+
+\begin{lstlisting}[language={}]
+ship-state,date,most_bought_size,max_quantity
+ANDAMAN & NICOBAR,04-02-22,M,1
+ANDAMAN & NICOBAR,04-03-22,S,2
+ANDAMAN & NICOBAR,04-04-22,S,3
+ANDAMAN & NICOBAR,04-05-22,S,3
+ANDAMAN & NICOBAR,04-06-22,S,3
+ANDAMAN & NICOBAR,04-07-22,S,4
+ANDAMAN & NICOBAR,04-08-22,S,4
+ANDAMAN & NICOBAR,04-09-22,XL,5
+\end{lstlisting}
+
+\textbf{Kiểm chứng thủ công.} Với \texttt{ship-state = ANDAMAN \& NICOBAR} và ngày tính toán \texttt{04-09-22}, cửa sổ quá khứ là từ \texttt{04-02-22} đến \texttt{04-08-22}. Sau khi lọc các dòng có status chứa \texttt{shipped} và \texttt{Qty > 0}, tổng quantity theo size trong window là:
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+\textbf{Size} & \textbf{Tổng Qty trong window} \\
+\midrule
+XL & 5 \\
+L & 4 \\
+S & 4 \\
+XS & 4 \\
+XXL & 3 \\
+3XL & 1 \\
+M & 1 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Size \texttt{XL} có tổng quantity cao nhất là 5, khớp với dòng output \texttt{ANDAMAN \& NICOBAR,04-09-22,XL,5}. Kiểm chứng này cho thấy cách phát sinh đóng góp $t+1$ đến $t+7$ tương đương với cửa sổ $[d-7, d-1]$ của đề bài.
+
+\subsection{Minh chứng bằng hình ảnh}
+Các hình dưới đây được để sẵn theo đúng đường dẫn trong thư mục \texttt{img/1-1}. Khi thêm ảnh vào sau, chỉ cần đặt đúng tên file tương ứng.
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/1-1/run_success.png}
+    {\includegraphics[width=0.9\textwidth]{img/1-1/run_success.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh chạy thành công tại \texttt{img/1-1/run\_success.png}}}}
+    \caption{Kết quả chạy chương trình Task 1.1}
+    \label{fig:task1_1_run_success}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/1-1/output_preview.png}
+    {\includegraphics[width=0.9\textwidth]{img/1-1/output_preview.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh preview output tại \texttt{img/1-1/output\_preview.png}}}}
+    \caption{Một phần nội dung file \texttt{Task\_1-1.csv}}
+    \label{fig:task1_1_output_preview}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \IfFileExists{img/1-1/manual_check.png}
+    {\includegraphics[width=0.9\textwidth]{img/1-1/manual_check.png}}
+    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh kiểm chứng thủ công tại \texttt{img/1-1/manual\_check.png}}}}
+    \caption{Kiểm chứng thủ công sliding window cho một state-date mẫu}
+    \label{fig:task1_1_manual_check}
+\end{figure}

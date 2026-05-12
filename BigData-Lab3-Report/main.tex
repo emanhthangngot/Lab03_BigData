@@ -1,0 +1,78 @@
+\documentclass[12pt]{article}
+
+\usepackage{hcmus-report-template}
+
+% Disable indentation on new paragraphs
+\setlength{\parindent}{0pt}
+
+% Line spacing 1.5
+\renewcommand{\baselinestretch}{1.5}
+
+% Using bibtex
+%\usepackage{biblatex}
+% Graphic path: tìm hình trong thư mục img/ của báo cáo và docs/img/ của repo
+\graphicspath{{img/}}
+
+% To use Times font family, uncomment this row
+% \usepackage{mathptmx}
+
+% To use roman section / subsection, uncomment these rows
+% \renewcommand{\thesection}{\Roman{section}}
+% \renewcommand{\thesubsection}{\thesection.\Roman{subsection}}
+
+% Define course name, report name and report title.
+\newcommand{\coursename}{Dữ liệu lớn}
+\newcommand{\reportname}{Advanced MapReduce & Spark Structured APIs}
+\newcommand{\reporttitle}{BÁO CÁO LAB 3}
+
+\newcommand{\studentname}{23120099 - Lê Xuân Trí \\ 23120180 - Nguyễn Lê Trung Trực \\ 23120166 - Trần Hữu Kim Thành \\ 23120185 - Nguyễn Hồ Anh Tuấn}
+\newcommand{\teachername}{Thầy Trần Huy Bân \\ Thầy Võ Nhật Tân}
+
+% Header
+\lhead{\reporttitle}
+\rhead{Trường Đại học Khoa học Tự nhiên - ĐHQG HCM\\
+\coursename
+}
+
+% Footer
+
+
+% ============ DOCUMENT ============
+\begin{document}
+
+\pagenumbering{roman}
+\input{content/title.tex}
+
+\tableofcontents
+\pagebreak
+% \listoftables
+% \listoffigures
+
+
+\pagenumbering{arabic}
+\setcounter{page}{1}
+
+
+
+\input{content/group_info.tex}
+
+\input{content/task1_1.tex}
+
+\input{content/task1_2.tex}
+
+\input{content/task2_1.tex}
+
+\input{content/task2_2.tex}
+
+\input{appendix/appendix.tex}
+% References
+\input{ref/ref}
+
+
+
+
+
+
+
+
+\end{document}
