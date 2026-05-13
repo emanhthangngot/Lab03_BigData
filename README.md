@@ -35,28 +35,28 @@ Nếu bạn muốn test từng bài một thay vì chạy cả 4, bạn có th�
 
 **Task 1-1:**
 ```bash
-spark-shell -i <(echo ':load src/Task_1-1/src/main/scala/Task1_1.scala
+spark-shell -i <(echo ':load src/Task_1-1/source/Task1_1.scala
 Task1_1.main(Array("Amazon Sale Report.csv", "data/output/Task_1-1.csv"))
 sys.exit(0)')
 ```
 
 **Task 1-2:**
 ```bash
-spark-shell -i <(echo ':load src/Task_1-2/src/main/scala/Task1_2.scala
+spark-shell -i <(echo ':load src/Task_1-2/source/Task1_2.scala
 Task1_2.main(Array("Amazon Sale Report.csv", "data/output/Task_1-2.csv"))
 sys.exit(0)')
 ```
 
 **Task 2-1:**
 ```bash
-spark-shell -i <(echo ':load src/Task_2-1/src/main/scala/Task2_1.scala
+spark-shell -i <(echo ':load src/Task_2-1/source/Task2_1.scala
 Task2_1.main(Array("Amazon Sale Report.csv", "data/output/Task_2-1.parquet"))
 sys.exit(0)')
 ```
 
 **Task 2-2:**
 ```bash
-spark-shell -i <(echo ':load src/Task_2-2/src/main/scala/Task2_2.scala
+spark-shell -i <(echo ':load src/Task_2-2/source/Task2_2.scala
 Task2_2.main(Array("Amazon Sale Report.csv", "data/output/Task_2-2.parquet"))
 sys.exit(0)')
 ```
