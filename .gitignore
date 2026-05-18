@@ -14,3 +14,19 @@ project/target/
 project/project/
 data/input/
 data/output/
+
+# LaTeX report build output
+BigData-Lab3-Report/*.aux
+BigData-Lab3-Report/*.bbl
+BigData-Lab3-Report/*.bcf
+BigData-Lab3-Report/*.blg
+BigData-Lab3-Report/*.fdb_latexmk
+BigData-Lab3-Report/*.fls
+BigData-Lab3-Report/*.log
+BigData-Lab3-Report/*.lof
+BigData-Lab3-Report/*.lot
+BigData-Lab3-Report/*.out
+BigData-Lab3-Report/*.pdf
+BigData-Lab3-Report/*.run.xml
+BigData-Lab3-Report/*.synctex.gz
+BigData-Lab3-Report/*.toc
