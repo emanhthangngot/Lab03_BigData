@@ -93,6 +93,69 @@ val winners = sizeTotals
   }
 \end{lstlisting}
 
+\subsection{Phân tích chuyên sâu}
+
+\subsubsection{Pseudocode tổng quan}
+
+\begin{algorithm}[H]
+\caption{Sliding Window --- Most Bought Size per State (MapReduce)}
+\label{alg:task1_1}
+\begin{algorithmic}[1]
+\Require Dataset $\mathcal{D}$ with columns (Date, Status, Qty, Size, ship-state)
+\Ensure CSV file: (State, Date $d$, MostBoughtSize, MaxQty)
+\Statex
+\State $d_{\min}, d_{\max} \gets$ min and max epoch day in $\mathcal{D}$
+\Statex
+\Statex \textbf{--- MAP PHASE ---}
+\ForAll{row $r \in \mathcal{D}$ where Status contains ``shipped'' $\wedge$ Qty $> 0$}
+    \State $t \gets$ epochDay(r.Date)
+    \For{$\delta = 1$ \textbf{to} $7$}
+        \If{$d_{\min} \leq t + \delta \leq d_{\max}$}
+            \State \textbf{emit} $\langle$(r.State, $t + \delta$, r.Size), r.Qty$\rangle$
+        \EndIf
+    \EndFor
+\EndFor
+\Statex
+\Statex \textbf{--- REDUCE PHASE 1 ---}
+\ForAll{key (State, Day, Size)}
+    \State totalQty $\gets \sum$ values \Comment{reduceByKey(\_ + \_)}
+\EndFor
+\Statex
+\Statex \textbf{--- REDUCE PHASE 2 ---}
+\ForAll{key (State, Day)}
+    \State winner $\gets \arg\max_{\text{Size}}$ totalQty \Comment{tie-break: lexicographic}
+    \State \textbf{emit} (State, Day, winner.Size, winner.Qty)
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+Phạm vi cửa sổ trượt cho ngày tính toán $d$ được định nghĩa:
+\[
+W(d) = [d - 7,\; d - 1]
+\]
+Tương đương, một purchase tại ngày $t$ đóng góp cho các ngày tính toán $d \in [t+1,\; t+7]$.
+
+\subsubsection{Tại sao naive nested-loop bất khả thi}
+
+Cách tiếp cận trực tiếp là: với mỗi ngày $d$ và mỗi state $s$, quét toàn bộ dataset để lọc các dòng có ngày thuộc $[d-7, d-1]$ và cùng state, rồi đếm quantity theo size. Gọi $D$ là số ngày distinct, $S$ là số state, $N$ là tổng số dòng; phương pháp này có chi phí $O(D \times S \times N)$. Với $D \approx 120$, $S \approx 36$, $N \approx 128\,000$, ta có $\sim 5.5 \times 10^8$ phép so sánh --- quá tốn kém và không tận dụng được tính song song của MapReduce.
+
+\subsubsection{Key design giải quyết vấn đề thế nào}
+
+Thay vì ``kéo ngược'' từ ngày $d$ ra quá khứ, lời giải ``đẩy xuôi'' từ mỗi purchase: một order tại ngày $t$ tự phát sinh 7 bản ghi đóng góp cho các ngày $t+1$ đến $t+7$. Key emit là \texttt{(state, targetDay, size)}, biến sliding window thành bài toán gom nhóm key-value:
+
+\begin{itemize}
+    \item \textbf{Reduce lần 1} (\texttt{reduceByKey(\_ + \_)}): cộng tổng quantity cho mỗi \texttt{(state, day, size)}. Chi phí: $O(N \times 7)$ bản ghi emit, sau đó shuffle và reduce --- hoàn toàn parallelizable.
+    \item \textbf{Reduce lần 2}: đổi key thành \texttt{(state, day)}, chọn size có tổng quantity lớn nhất. Nếu hòa, phá hòa bằng thứ tự từ điển tăng dần.
+\end{itemize}
+
+Cách này đạt chi phí $O(7N)$ cho map phase và $O(K \log K)$ cho sort/reduce (với $K$ là số key distinct), tốt hơn naive approach nhiều bậc.
+
+\subsubsection{Xử lý unseen timestamps trong output}
+
+Vì window trượt mỗi ngày, kết quả có thể chứa ngày $d$ mà \textit{không có order nào} xảy ra đúng ngày $d$ trong dataset gốc. Ví dụ: nếu không có order ngày 04-05-22 nhưng có orders từ 03-29-22 đến 04-04-22, thì ngày 04-05-22 vẫn xuất hiện trong output vì window $[03-29, 04-04]$ có dữ liệu.
+
+Cơ chế emission tự nhiên giải quyết điều này: khi một purchase ở ngày $t$ emit đóng góp cho $t+1$ đến $t+7$, các ngày ``trống'' trong khoảng đó vẫn nhận được bản ghi. Code chỉ giới hạn $d_{\min} \leq \text{targetDay} \leq d_{\max}$ để tránh phát sinh kết quả ngoài phạm vi thời gian của dataset.
+
 \subsection{Kết quả thực thi \& Xuất dữ liệu}
 File output đã được tạo tại \texttt{data/output/Task\_1-1.csv}. File có 4,058 dòng bao gồm header, tương ứng 4,057 dòng kết quả. Một số dòng đầu của output:
 

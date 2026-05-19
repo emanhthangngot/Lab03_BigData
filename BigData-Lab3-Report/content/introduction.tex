@@ -3,25 +3,81 @@
 %================================================
 \section{Giới thiệu}
 
-\textbf{Bối cảnh bài lab.} Điền mô tả ngắn về Lab 03: sử dụng Amazon Sale Report dataset để giải quyết hai nhóm bài toán, gồm MapReduce nâng cao và Spark Structured APIs.
+\subsection{Bối cảnh bài lab}
 
-\textbf{Mục tiêu báo cáo.} Điền mục tiêu của báo cáo: trình bày cách hiểu truy vấn, phân rã bài toán, chiến lược triển khai, kết quả xuất dữ liệu và các phân tích bắt buộc về execution plan/benchmark.
+Lab 03 của môn Dữ liệu lớn yêu cầu sinh viên giải quyết bốn bài toán phân tích dữ liệu phân tán trên bộ dữ liệu \textbf{Amazon Sale Report}, sử dụng hai nhóm công nghệ:
 
-\textbf{Dataset và môi trường.} Điền thông tin dataset, đường dẫn input, môi trường chạy, phiên bản Scala/Spark/SBT hoặc công cụ tương ứng. Nếu nhóm chạy local mode, ghi rõ cấu hình CPU/RAM chính.
+\begin{itemize}
+    \item \textbf{Task 1-1 và Task 1-2:} Advanced MapReduce --- triển khai thuật toán bằng Spark RDD transformations theo tư duy key-value processing.
+    \item \textbf{Task 2-1 và Task 2-2:} Spark Structured APIs --- sử dụng DataFrame/Dataset API với Catalyst optimizer.
+\end{itemize}
 
-\textbf{Tổng quan kết quả đầu ra.} Điền bảng tóm tắt bốn file output, định dạng, số dòng và trạng thái kiểm chứng.
+\subsection{Bộ dữ liệu Amazon Sale Report}
+
+Dataset chứa thông tin đơn hàng trên nền tảng Amazon tại thị trường Ấn Độ, với khoảng \textbf{128,000 dòng} và \textbf{24 cột}. Các cột chính được sử dụng trong bốn task:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Cột} & \textbf{Kiểu} & \textbf{Mô tả} \\
+\midrule
+\texttt{Date}              & String  & Ngày đặt hàng, format \texttt{MM-dd-yy} \\
+\texttt{Status}            & String  & Trạng thái đơn (Shipped, Cancelled, ...) \\
+\texttt{Fulfilment}        & String  & Đơn vị thực hiện (Amazon, Merchant) \\
+\texttt{ship-service-level}& String  & Mức dịch vụ (Standard, Expedited) \\
+\texttt{ship-city}         & String  & Thành phố giao hàng \\
+\texttt{ship-state}        & String  & Bang giao hàng \\
+\texttt{SKU}               & String  & Mã sản phẩm (Stock Keeping Unit) \\
+\texttt{Style}             & String  & Mã kiểu dáng sản phẩm \\
+\texttt{Size}              & String  & Size sản phẩm (S, M, L, XL, XXL, ...) \\
+\texttt{Qty}               & Integer & Số lượng mua \\
+\texttt{Amount}            & Double  & Giá trị đơn hàng (INR) \\
+\texttt{promotion-ids}     & String  & Danh sách mã khuyến mãi (comma-separated) \\
+\texttt{Courier Status}    & String  & Trạng thái vận chuyển \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Môi trường thực thi}
+
+\begin{center}
+\begin{tabular}{ll}
+\toprule
+\textbf{Thành phần} & \textbf{Chi tiết} \\
+\midrule
+Apache Spark  & 3.4.3 \\
+Scala         & 2.12 \\
+Chế độ chạy   & Local mode (\texttt{local[*]}) \\
+Hệ điều hành  & WSL Ubuntu 22.04 trên Windows \\
+Java          & OpenJDK 11 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Lý do chọn Scala}
+
+Scala được chọn làm ngôn ngữ triển khai cho toàn bộ bốn task vì ba lý do chính:
+\begin{enumerate}
+    \item \textbf{Full điểm ngôn ngữ:} Theo rubric chấm điểm, sử dụng Scala cho giải pháp hoàn chỉnh được 0.125 điểm/task.
+    \item \textbf{Type-safety:} Scala là ngôn ngữ tĩnh kiểu, giúp phát hiện lỗi tại compile-time thay vì runtime --- đặc biệt quan trọng khi làm việc với Dataset API.
+    \item \textbf{Native Spark API:} Spark được viết bằng Scala; các API như \texttt{aggregateByKey}, \texttt{reduceByKey}, Dataset encoders hoạt động tự nhiên nhất với Scala, tránh overhead của PySpark serialization.
+\end{enumerate}
+
+\subsection{Tổng quan kết quả đầu ra}
 
 \begin{center}
 \begin{tabular}{llll}
 \toprule
 \textbf{Task} & \textbf{Framework} & \textbf{Output} & \textbf{Trạng thái} \\
 \midrule
-Task 1.1 & MapReduce & \texttt{Task\_1-1.csv} & TODO \\
-Task 1.2 & MapReduce & \texttt{Task\_1-2.csv} & TODO \\
-Task 2.1 & Spark Structured API & \texttt{Task\_2-1.parquet} & TODO \\
-Task 2.2 & Spark Structured API & \texttt{Task\_2-2.parquet} & TODO \\
+Task 1.1 & MapReduce (RDD) & \texttt{Task\_1-1.csv} & Hoàn thành, đã kiểm chứng \\
+Task 1.2 & MapReduce (RDD) & \texttt{Task\_1-2.csv} & Hoàn thành, đã kiểm chứng \\
+Task 2.1 & Spark Structured API & \texttt{Task\_2-1.parquet} & Hoàn thành, đã kiểm chứng \\
+Task 2.2 & Spark Structured API & \texttt{Task\_2-2.parquet} & Hoàn thành, đã kiểm chứng \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\textbf{Cấu trúc báo cáo.} Điền mô tả ngắn cách các phần tiếp theo được tổ chức: thông tin nhóm, Task 1.1, Task 1.2, Task 2.1, Task 2.2, kết luận và phụ lục.
+\subsection{Cấu trúc báo cáo}
+
+Báo cáo được tổ chức thành các phần sau: thông tin nhóm (Section 1), sau đó mỗi task là một section riêng biệt (Section 2--5) với cấu trúc thống nhất gồm: phân tích truy vấn, phân rã bước, lý do phân rã, chiến lược thực thi kèm code snippets, phân tích chuyên sâu, kết quả và kiểm chứng. Phần kết luận (Section 6) tổng kết trade-off giữa MapReduce và Spark Structured APIs.
