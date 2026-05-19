@@ -3,97 +3,100 @@
 %================================================
 \section{Task 2.1: Percentage of Cancelled Orders per City}
 
-\subsection{Phân tích truy vấn (Query Analysis)}
+\subsection{Phân tích truy vấn}
 
-Bài toán yêu cầu tính \textbf{phần trăm đơn hàng bị huỷ} (cancelled) theo từng thành phố (\texttt{ship-city}), trong đó chỉ xét các đơn hàng thỏa \textbf{đồng thời ba điều kiện}:
+Bài toán yêu cầu tính \textbf{phần trăm đơn hàng bị hủy} theo từng thành phố (\texttt{ship-city}), trong đó chỉ xét các đơn hàng thỏa mãn \textbf{đồng thời ba điều kiện} sau:
 
-\textbf{Điều kiện 1 --- Service level.}
-Đơn hàng phải có \texttt{ship-service-level} bằng \texttt{"Standard"}. Trong code, phép so sánh được chuẩn hóa bằng \texttt{lower(trim(col("ship-service-level"))) === "standard"} để tránh sai lệch do khoảng trắng thừa hoặc khác biệt chữ hoa/chữ thường.
+\textbf{Điều kiện 1 --- Mức dịch vụ.}
+Đơn hàng phải có mức dịch vụ giao hàng \texttt{ship-service-level} bằng \texttt{"Standard"}. Trong mã nguồn, phép so sánh được chuẩn hóa bằng \texttt{lower(trim(col("ship-service-level"))) === "standard"} để tránh sai lệch do khoảng trắng thừa hoặc khác biệt giữa chữ hoa và chữ thường.
 
-\textbf{Điều kiện 2 --- Ít nhất 3 temporally-valid promotions.}
-Mỗi đơn hàng chứa cột \texttt{promotion-ids}, là chuỗi các mã khuyến mãi phân tách bằng dấu phẩy. Một promotion được gọi là \textit{temporally valid} (hợp lệ về mặt thời gian) nếu khoảng thời gian hoạt động của nó trên \textbf{toàn bộ dataset} kéo dài ít nhất 2 ngày. Cụ thể, với mỗi promotion id duy nhất xuất hiện trong dataset:
+\textbf{Điều kiện 2 --- Có ít nhất 3 khuyến mãi hợp lệ về mặt thời gian.}
+Mỗi đơn hàng chứa cột \texttt{promotion-ids}, là chuỗi các mã khuyến mãi được phân tách bằng dấu phẩy. Một chương trình khuyến mãi được gọi là \textit{hợp lệ về mặt thời gian} nếu khoảng thời gian hoạt động của nó trên \textbf{toàn bộ tập dữ liệu} kéo dài ít nhất 2 ngày. Cụ thể, với mỗi mã khuyến mãi duy nhất xuất hiện trong bộ dữ liệu:
 \begin{itemize}
     \item Xác định ngày xuất hiện \textbf{đầu tiên} ($d_{\min}$) và ngày xuất hiện \textbf{cuối cùng} ($d_{\max}$).
-    \item Tính khoảng hoạt động: $\text{active\_days} = d_{\max} - d_{\min}$ (tính bằng số ngày).
-    \item Promotion hợp lệ khi $\text{active\_days} \geq 2$.
+    \item Tính khoảng thời gian hoạt động: $\text{active\_days} = d_{\max} - d_{\min}$ (tính bằng số ngày).
+    \item Khuyến mãi hợp lệ khi và chỉ khi $\text{active\_days} \geq 2$.
 \end{itemize}
-Một đơn hàng thỏa điều kiện này nếu trong danh sách \texttt{promotion-ids} của nó có \textbf{ít nhất 3} promotion hợp lệ, kể cả các promotion do Amazon phát hành.
+Một đơn hàng thỏa mãn điều kiện này nếu trong danh sách \texttt{promotion-ids} của nó chứa \textbf{ít nhất 3} mã khuyến mãi hợp lệ, kể cả các khuyến mãi do Amazon phát hành.
 
-\textbf{Điều kiện 3 --- Amount thấp hơn trung bình bang.}
-Tính giá trị trung bình \texttt{Amount} theo từng \texttt{ship-state} trên tập con các đơn hàng có \texttt{Fulfilment = "Merchant"} và \texttt{Courier Status = "Shipped"}. Đơn hàng đang xét chỉ được giữ nếu:
+\textbf{Điều kiện 3 --- Giá trị đơn hàng (Amount) thấp hơn mức trung bình của bang.}
+Tính giá trị trung bình cột \texttt{Amount} theo từng bang \texttt{ship-state} trên tập con các đơn hàng thỏa mãn \texttt{Fulfilment = "Merchant"} và \texttt{Courier Status = "Shipped"}. Đơn hàng đang xét chỉ được giữ lại nếu:
 \[
-\texttt{Amount}_{\text{order}} < \overline{\texttt{Amount}}_{\text{Merchant,Shipped}}^{\text{(same state)}}
+\texttt{Amount}_{\text{order}} < \overline{\texttt{Amount}}_{\text{Merchant,Shipped}}^{\text{(cùng bang)}}
 \]
 
-\textbf{Tính phần trăm cancelled.}
-Sau khi lọc ra tất cả đơn hàng thỏa đồng thời ba điều kiện, nhóm theo \texttt{ship-city} đã chuẩn hóa:
+\textbf{Tính phần trăm đơn hàng bị hủy.}
+Sau khi lọc ra tất cả đơn hàng thỏa mãn đồng thời cả ba điều kiện trên, chương trình tiến hành gom nhóm theo thành phố \texttt{ship-city} đã được chuẩn hóa để tính toán:
 \[
-\texttt{cancelled\_percentage} = \frac{|\{o : \texttt{Status}(o) = \text{``Cancelled''}\}|}{|\text{tổng đơn qualified}|} \times 100
+\texttt{cancelled\_percentage} = \frac{|\{o : \texttt{Status}(o) = \text{``Cancelled''}\}|}{|\text{tổng số đơn hàng hợp lệ}|} \times 100
 \]
-Code xác định trạng thái cancelled bằng \texttt{lower(trim(col("Status"))) === "cancelled"}, tức so khớp chính xác sau chuẩn hóa.
+Mã nguồn xác định trạng thái đơn hàng bị hủy bằng phép so khớp \texttt{lower(trim(col("Status"))) === "cancelled"} để đảm bảo tính chính xác sau khi chuẩn hóa.
 
-\textbf{Schema output Parquet:}
-\begin{center}
+\textbf{Cấu trúc dữ liệu đầu ra:}
+\begin{table}[H]
+\centering
 \begin{tabular}{lll}
 \toprule
 \textbf{Cột} & \textbf{Kiểu} & \textbf{Ý nghĩa} \\
 \midrule
 \texttt{ship-city}  & String & Thành phố giao hàng đã chuẩn hóa viết hoa \\
-\texttt{cancelled\_percentage} & Double & Tỷ lệ huỷ (\%), làm tròn 4 chữ số thập phân \\
+\texttt{cancelled\_percentage} & Double & Tỷ lệ hủy (\%), làm tròn 4 chữ số thập phân \\
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Định nghĩa schema tệp đầu ra Task\_2-1.parquet}
+\label{tab:task2_1_schema}
+\end{table}
 
 % ------------------------------------------------------------------
-\subsection{Phân rã thành các bước cơ bản (Decomposition)}
+\subsection{Phân rã thành các bước cơ bản}
 
-Lời giải được phân rã thành 9 bước tuần tự, mỗi bước tương ứng một DataFrame transformation rõ ràng:
+Lời giải được phân rã thành 9 bước xử lý tuần tự, mỗi bước tương ứng với một phép biến đổi DataFrame rõ ràng:
 
 \begin{enumerate}
-    \item \textbf{Đọc CSV và cast kiểu dữ liệu} (\texttt{df}).
-    Đọc file CSV với header, tắt \texttt{inferSchema} để kiểm soát kiểu thủ công. Parse cột \texttt{Date} sang kiểu date bằng format \texttt{MM-dd-yy}, cast \texttt{Amount} sang \texttt{DoubleType}, chuẩn hóa \texttt{ship-city}/\texttt{ship-state} bằng \texttt{upper(trim(...))}, và tạo cột \texttt{order\_row\_id} bằng \texttt{monotonically\_increasing\_id()} để định danh duy nhất từng dòng sau các phép join. DataFrame này được \texttt{cache()} vì sử dụng lại ở nhiều nhánh.
+    \item \textbf{Đọc dữ liệu CSV và chuyển kiểu dữ liệu} (\texttt{df}).
+    Đọc tệp CSV với dòng đầu chứa tiêu đề, tắt tính năng tự động suy luận kiểu dữ liệu (\texttt{inferSchema}) để kiểm soát kiểu dữ liệu một cách chủ động. Phân tích cột \texttt{Date} sang kiểu ngày (\texttt{date}) theo định dạng \texttt{MM-dd-yy}, chuyển kiểu cột \texttt{Amount} sang \texttt{DoubleType}, chuẩn hóa tên thành phố \texttt{ship-city} và bang \texttt{ship-state} bằng hàm \texttt{upper(trim(...))}, đồng thời tạo cột định danh \texttt{order\_row\_id} bằng hàm \texttt{monotonically\_increasing\_id()} để định danh duy nhất cho từng đơn hàng sau các phép liên kết. DataFrame này được lưu tạm vào bộ nhớ (\texttt{cache()}) vì sẽ được tái sử dụng trong nhiều nhánh xử lý khác nhau.
 
-    \item \textbf{Explode promotion-ids thành từng dòng riêng} (\texttt{promoExploded}).
-    Lọc bỏ các dòng có \texttt{promotion-ids} null hoặc rỗng. Dùng \texttt{split} tách chuỗi theo dấu phẩy, \texttt{transform} + \texttt{trim} để loại khoảng trắng thừa, rồi \texttt{explode} thành từng promotion id riêng lẻ. Bước này cần thiết vì active period là thuộc tính \textit{toàn cục} của promotion id — phải gom tất cả ngày xuất hiện trên toàn dataset.
+    \item \textbf{Tách các mã khuyến mãi thành từng dòng riêng} (\texttt{promoExploded}).
+    Lọc bỏ các dòng có cột \texttt{promotion-ids} rỗng hoặc mang giá trị null. Sử dụng hàm \texttt{split} để tách chuỗi khuyến mãi theo dấu phẩy, dùng hàm \texttt{transform} kết hợp với \texttt{trim} để loại bỏ khoảng trắng dư thừa của từng mã, sau đó dùng hàm \texttt{explode} để phân rã danh sách thành từng dòng mã khuyến mãi riêng lẻ. Bước này rất quan trọng vì khoảng thời gian hoạt động là thuộc tính mang tính chất toàn cục của từng mã khuyến mãi — cần thu thập toàn bộ các ngày xuất hiện của mã trên toàn bộ tập dữ liệu.
 
-    \item \textbf{Tính promotion validity} (\texttt{promoValidity}).
-    GroupBy \texttt{promo\_id}, tính \texttt{min(parsed\_date)} và \texttt{max(parsed\_date)}, sau đó \texttt{datediff} để ra \texttt{active\_days}. Lọc giữ lại các promotion có $\text{active\_days} \geq 2$.
+    \item \textbf{Tính toán thời gian hợp lệ của khuyến mãi} (\texttt{promoValidity}).
+    Gom nhóm theo mã khuyến mãi \texttt{promo\_id}, tính ngày xuất hiện sớm nhất \texttt{min(parsed\_date)} và muộn nhất \texttt{max(parsed\_date)}, sau đó sử dụng hàm hiệu ngày \texttt{datediff} để tính số ngày hoạt động \texttt{active\_days}. Chỉ giữ lại các mã khuyến mãi có số ngày hoạt động $\text{active\_days} \geq 2$.
 
-    \item \textbf{Đếm valid promotions theo từng order bằng DataFrame}.
-    Từ \texttt{df}, chương trình explode \texttt{promotion-ids} theo \texttt{order\_row\_id}, join với bảng \texttt{promoValidity}, rồi \texttt{groupBy("order\_row\_id")} để đếm số promotion hợp lệ bằng \texttt{countDistinct}. Cách này không dùng UDF và không collect tập promotion về driver, nên toàn bộ logic vẫn hiển thị trong Catalyst plan.
+    \item \textbf{Đếm số khuyến mãi hợp lệ theo từng đơn hàng bằng DataFrame}.
+    Từ DataFrame gốc \texttt{df}, chương trình thực hiện phân rã các mã khuyến mãi theo định danh đơn hàng \texttt{order\_row\_id}, liên kết với bảng khuyến mãi hợp lệ \texttt{promoValidity}, sau đó gom nhóm theo \texttt{order\_row\_id} để đếm số lượng khuyến mãi hợp lệ duy nhất bằng hàm \texttt{countDistinct}. Cách làm này giữ nguyên tính chất declarative của Structured API, không sử dụng hàm tự định nghĩa (UDF) và không phải thu thập dữ liệu về nút điều phối, giúp Catalyst dễ dàng tối ưu hóa.
 
     \item \textbf{Áp dụng Điều kiện 1 và 2} (\texttt{afterCond12}).
-    Filter \texttt{ship-service-level = "Standard"}, sau đó left join với bảng \texttt{validPromotionCounts} theo \texttt{order\_row\_id}; order không có promotion hợp lệ nhận \texttt{0}. Cuối cùng filter \texttt{valid\_promo\_count >= 3}.
+    Lọc các đơn hàng có \texttt{ship-service-level = "Standard"}, sau đó thực hiện phép liên kết trái với bảng đếm số khuyến mãi hợp lệ \texttt{validPromotionCounts} theo \texttt{order\_row\_id}; các đơn hàng không có khuyến mãi nào hợp lệ sẽ nhận giá trị mặc định là \texttt{0} thông qua hàm \texttt{coalesce}. Cuối cùng, thực hiện lọc lấy các đơn hàng có \texttt{valid\_promo\_count >= 3}.
 
-    \item \textbf{Tính trung bình Amount theo state} (\texttt{stateAvgDf}).
-    Từ \texttt{df} gốc (không phải \texttt{afterCond12}), lọc \texttt{Fulfilment = "Merchant"} và \texttt{Courier Status = "Shipped"}, loại Amount null, rồi \texttt{groupBy("ship\_state\_norm").agg(avg("Amount"))}. Kết quả là bảng nhỏ chứa ngưỡng trung bình cho mỗi state đã chuẩn hóa.
+    \item \textbf{Tính toán giá trị trung bình Amount theo bang} (\texttt{stateAvgDf}).
+    Từ DataFrame gốc \texttt{df} (không phải \texttt{afterCond12}), lọc các bản ghi có \texttt{Fulfilment = "Merchant"} và \texttt{Courier Status = "Shipped"}, loại bỏ các dòng có giá trị Amount bị null, sau đó thực hiện gom nhóm và tính trung bình: \texttt{groupBy("ship\_state\_norm").agg(avg("Amount"))}. Kết quả thu được là một bảng dữ liệu nhỏ chứa ngưỡng chi tiêu trung bình cho từng bang.
 
-    \item \textbf{Join và áp dụng Điều kiện 3} (\texttt{qualifiedDf}).
-    Inner join \texttt{afterCond12} với \texttt{stateAvgDf} trên cột \texttt{ship\_state\_norm}, rồi filter \texttt{Amount < merchant\_shipped\_avg}. Sau bước này, chỉ còn lại các đơn thỏa đồng thời cả ba điều kiện.
+    \item \textbf{Liên kết và áp dụng Điều kiện 3} (\texttt{qualifiedDf}).
+    Thực hiện phép liên kết trong giữa \texttt{afterCond12} và \texttt{stateAvgDf} trên cột bang \texttt{ship\_state\_norm}, sau đó lọc lấy các đơn hàng có \texttt{Amount < merchant\_shipped\_avg}. Sau bước này, ta thu được tập hợp các đơn hàng thỏa mãn đồng thời cả ba điều kiện lọc.
 
-    \item \textbf{Tính cancelled percentage theo city} (\texttt{resultDf}).
-    GroupBy \texttt{ship\_city\_norm}, đếm tổng đơn và đếm đơn cancelled bằng \texttt{sum(when(... === "cancelled", 1).otherwise(0))}. Tính tỷ lệ phần trăm và làm tròn 4 chữ số.
+    \item \textbf{Tính phần trăm đơn hàng bị hủy theo từng thành phố} (\texttt{resultDf}).
+    Gom nhóm theo thành phố \texttt{ship\_city\_norm}, đếm tổng số đơn hàng bằng \texttt{count(*)} và đếm số đơn hàng bị hủy bằng hàm tổng điều kiện \texttt{sum(when(... === "cancelled", 1).otherwise(0))}. Tính tỷ lệ phần trăm đơn hàng bị hủy và làm tròn đến 4 chữ số thập phân.
 
-    \item \textbf{Xuất single Parquet file}.
-    \texttt{coalesce(1)} để gộp về 1 partition, ghi vào thư mục tạm, rồi rename part file thành file Parquet đơn lẻ tại đường dẫn output. Xóa checksum sidecar file.
+    \item \textbf{Xuất tệp Parquet duy nhất}.
+    Sử dụng \texttt{coalesce(1)} để gom dữ liệu về một phân vùng duy nhất, ghi vào một thư mục tạm trên ổ đĩa, sau đó đổi tên tệp bộ phận thành tên tệp Parquet đơn lẻ chính xác theo đường dẫn đầu ra và dọn dẹp các tệp phụ checksum.
 \end{enumerate}
 
 % ------------------------------------------------------------------
 \subsection{Lý do phân rã}
 
-\textbf{Temporally-valid promotion phải tính toàn cục trước.}
-Active period của một promotion id được xác định bởi khoảng cách giữa ngày xuất hiện đầu tiên và cuối cùng \textit{trên toàn bộ dataset}, không phải chỉ trong một order riêng lẻ. Do đó, bước explode--groupBy--datediff phải xử lý toàn bộ dữ liệu trước khi kết quả có thể áp dụng ngược lại từng order. Đây là lý do pipeline chia thành hai nhánh song song: nhánh tính validity và nhánh xử lý order chính.
+\textbf{Tính khoảng hoạt động hợp lệ của khuyến mãi trên toàn bộ tập dữ liệu trước.}
+Khoảng thời gian hoạt động của một mã khuyến mãi được xác định bởi khoảng cách giữa ngày xuất hiện đầu tiên và ngày xuất hiện cuối cùng của nó trên toàn bộ tập dữ liệu, chứ không thể chỉ xét riêng lẻ trong từng đơn hàng. Do đó, quy trình phân rã-gom nhóm-hiệu ngày bắt buộc phải được xử lý trên toàn bộ dữ liệu trước khi áp dụng ngược lại cho từng đơn hàng. Đây là lý do quy trình xử lý được chia thành hai nhánh song song: một nhánh tính toán độ hợp lệ của các mã khuyến mãi và nhánh chính xử lý dữ liệu đơn hàng.
 
-\textbf{Average Amount theo state phải tính riêng rồi join.}
-Điều kiện thứ ba yêu cầu so sánh Amount của mỗi order với trung bình Amount cùng state nhưng chỉ trên tập con Merchant+Shipped. Vì tập con này khác với tập order đang xét (Standard service level), ta không thể dùng window function trực tiếp mà phải tính aggregate riêng rồi join theo \texttt{ship\_state\_norm}. Bảng \texttt{stateAvgDf} nhỏ, nên Spark có thể chọn BroadcastHashJoin, tránh shuffle.
+\textbf{Ngưỡng chi tiêu trung bình theo bang phải được tính riêng rồi liên kết sau.}
+Điều kiện thứ ba yêu cầu so sánh giá trị \texttt{Amount} của mỗi đơn hàng với mức trung bình của bang tương ứng nhưng chỉ trên tập hợp con các đơn hàng của Merchant và đã Shipped. Vì tập hợp con này có tính chất khác biệt hoàn toàn với tập hợp đơn hàng Standard đang xét, chúng ta không thể sử dụng trực tiếp hàm cửa sổ mà bắt buộc phải tính toán trung bình riêng biệt thành bảng \texttt{stateAvgDf} rồi thực hiện phép liên kết theo cột \texttt{ship\_state\_norm}. Vì bảng \texttt{stateAvgDf} có kích thước rất nhỏ, Spark có thể tự động áp dụng phép liên kết phát tán \texttt{BroadcastHashJoin} để tránh chi phí phân tán dữ liệu qua mạng.
 
-\textbf{Thứ tự áp dụng điều kiện tối ưu shuffle cost.}
-Code áp dụng Điều kiện 1 (filter Standard) trước khi join với bảng đếm promotion hợp lệ để giảm số dòng order chính tham gia join. Điều kiện 3 được áp dụng sau cùng vì cần kết quả join với \texttt{stateAvgDf}. Nếu đảo thứ tự --- join state average trước rồi mới lọc service level/promotion --- khối lượng dữ liệu tham gia join sẽ lớn hơn đáng kể.
+\textbf{Thứ tự áp dụng các điều kiện lọc giúp tối ưu hóa chi phí shuffle.}
+Mã nguồn chủ động áp dụng Điều kiện 1 (lọc các đơn Standard) trước khi liên kết với bảng đếm số khuyến mãi để giảm thiểu số lượng đơn hàng tham gia vào phép liên kết. Điều kiện 3 (so sánh giá trị trung bình của bang) được áp dụng sau cùng vì nó phụ thuộc vào kết quả liên kết với bảng \texttt{stateAvgDf}. Nếu đảo ngược thứ tự — liên kết với bảng trung bình của bang trước rồi mới lọc mức dịch vụ và khuyến mãi — khối lượng dữ liệu tham gia vào phép liên kết và chi phí shuffle trung gian sẽ tăng lên rất nhiều.
 
 % ------------------------------------------------------------------
 \subsection{Chiến lược thực thi \& Triển khai mã nguồn}
 
-Task 2.1 được cài đặt trong file \texttt{src/Task\_2-1/source/Task2\_1.scala}, sử dụng \textbf{hoàn toàn DataFrame/Dataset API} --- không dùng Spark SQL string query. Chương trình nhận hai tham số: đường dẫn CSV đầu vào và đường dẫn file Parquet đầu ra.
+Task 2.1 được cài đặt trong file \texttt{src/Task\_2-1/source/Task2\_1.scala}, sử dụng hoàn toàn DataFrame/Dataset API --- tuyệt đối không dùng các chuỗi truy vấn Spark SQL dạng thô. Chương trình nhận hai tham số: đường dẫn CSV đầu vào và đường dẫn file Parquet đầu ra.
 
 \textbf{Lệnh chạy mẫu:}
 \begin{lstlisting}[language=bash]
@@ -128,7 +131,7 @@ val promoValidity = promoExploded
   .select("promo_id")
 \end{lstlisting}
 
-Lý do dùng \texttt{transform} + \texttt{trim} trước \texttt{explode} thay vì trim sau: đảm bảo mỗi token đã sạch trước khi tạo dòng mới, tránh tạo dòng thừa với promotion id rỗng do trailing comma.
+Lý do chương trình sử dụng hàm biến đổi \texttt{transform} kết hợp với \texttt{trim} trước khi chạy \texttt{explode} thay vì cắt khoảng trắng sau khi phân rã là: đảm bảo mỗi mã khuyến mãi được làm sạch ngay trong mảng trước khi phân rã dòng mới, tránh sinh ra các dòng trống vô nghĩa do các dấu phẩy dư thừa ở cuối chuỗi.
 
 \textbf{Đếm valid promotions theo order bằng DataFrame.}
 \begin{lstlisting}[language=Scala]
@@ -146,7 +149,7 @@ val validPromotionCounts = orderPromos
   .agg(countDistinct("promo_id").as("valid_promo_count"))
 \end{lstlisting}
 
-Chiến lược này giữ được tính declarative của Structured API. \texttt{promoValidity} chỉ có 185 promotion hợp lệ nên được Spark broadcast làm build side khi join với \texttt{orderPromos}; phần đếm theo \texttt{order\_row\_id} là aggregation rõ ràng, có thể nhìn thấy trong physical plan.
+Chiến lược này giữ trọn vẹn tính chất declarative của Structured API. Bảng \texttt{promoValidity} chỉ chứa 185 khuyến mãi hợp lệ nên được Spark tự động phát tán làm nhánh dựng bảng \textbf{Build side} khi liên kết với \texttt{orderPromos}; phần đếm số lượng theo khóa \texttt{order\_row\_id} là phép gom nhóm rõ ràng, hiển thị trực quan trong kế hoạch vật lý.
 
 \textbf{Filter service level và đếm promotions.}
 \begin{lstlisting}[language=Scala]
@@ -193,13 +196,13 @@ val resultDf = qualifiedDf
   .orderBy("ship-city")
 \end{lstlisting}
 
-Việc chuẩn hóa \texttt{ship-city} trước khi group là cần thiết vì dữ liệu có khác biệt chữ hoa/thường và khoảng trắng. Kết quả cuối cùng bám đúng câu chữ đề bài: tính percentage cho từng city.
+Việc chuẩn hóa tên thành phố \texttt{ship-city} trước khi gom nhóm là cực kỳ cần thiết để loại bỏ các sai lệch do chữ hoa/thường và khoảng trắng thừa. Kết quả cuối cùng bám sát yêu cầu của đề bài: tính tỷ lệ phần trăm cho từng thành phố.
 
 % ------------------------------------------------------------------
-\subsection{Phân tích chuyên sâu --- Kế hoạch thực thi (Execution Plan Analysis)}
+\subsection{Phân tích chuyên sâu --- Kế hoạch thực thi}
 
-\subsubsection{Output của explain(true)}
-Dưới đây là kế hoạch thực thi mở rộng (extended execution plan) thu được từ lệnh \texttt{resultDf.explain(true)} khi chạy chương trình:
+\subsubsection{Đầu ra của lệnh explain(true)}
+Dưới đây là kế hoạch thực thi chi tiết thu được từ lệnh \texttt{resultDf.explain(true)} khi chạy chương trình:
 
 \begin{lstlisting}[language={},basicstyle=\ttfamily\tiny]
 == Physical Plan ==
@@ -234,11 +237,12 @@ AdaptiveSparkPlan isFinalPlan=false
                            +- Exchange hashpartitioning(ship_state_norm, 200)
 \end{lstlisting}
 
-\subsubsection{Phân tích Physical Join Strategy}
+\subsubsection{Phân tích chiến lược liên kết vật lý}
 
-Pipeline chứa một phép join chính: \texttt{afterCond12} $\bowtie_{\texttt{ship\_state\_norm}}$ \texttt{stateAvgDf}.
+Quy trình xử lý chứa một phép liên kết chính: \texttt{afterCond12} $\bowtie_{\texttt{ship\_state\_norm}}$ \texttt{stateAvgDf}.
 
-\begin{center}
+\begin{table}[H]
+\centering
 \begin{tabular}{p{4cm}lp{6cm}}
 \toprule
 \textbf{Join} & \textbf{Strategy thực tế} & \textbf{Giải thích} \\
@@ -248,17 +252,20 @@ Pipeline chứa một phép join chính: \texttt{afterCond12} $\bowtie_{\texttt{
 \texttt{afterCond12} $\bowtie$ \texttt{stateAvgDf} & BroadcastHashJoin & \texttt{stateAvgDf} chỉ có bảng trung bình theo state, nhỏ hơn nhiều so với broadcast threshold mặc định 10 MB. \\
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Chi tiết các phép liên kết trong kế hoạch thực thi vật lý}
+\label{tab:task2_1_joins}
+\end{table}
 
-\textbf{Build side} của cả ba BroadcastHashJoin đều là phía phải trong physical plan: \texttt{promoValidity}, \texttt{validPromotionCounts}, và \texttt{stateAvgDf}. Spark serialize các bảng nhỏ này, broadcast đến executor, rồi hash lookup cục bộ trên partition của bảng lớn hơn. Nhờ vậy, các join chính không cần shuffle cả hai phía theo join key.
+Nhánh dựng bảng \textbf{Build side} của cả ba phép liên kết phát tán \texttt{BroadcastHashJoin} đều nằm ở phía bên phải trong kế hoạch vật lý: \texttt{promoValidity}, \texttt{validPromotionCounts}, và \texttt{stateAvgDf}. Spark tiến hành tuần tự hóa các bảng nhỏ này, phát tán đến các nút thực thi, sau đó thực hiện tìm kiếm bảng băm cục bộ trên phân vùng của bảng lớn hơn. Nhờ đó, các phép liên kết chính không cần phải thực hiện phân tán lại dữ liệu cả hai phía theo khóa liên kết.
 
-Nếu \texttt{stateAvgDf} vượt 10 MB (cấu hình \texttt{spark.sql.autoBroadcastJoinThreshold}), Spark sẽ chuyển sang SortMergeJoin --- yêu cầu shuffle cả hai bảng theo join key --- tốn kém hơn đáng kể. Trong trường hợp này, với chỉ $\sim$36 dòng, BroadcastHashJoin là lựa chọn tối ưu.
+Nếu \texttt{stateAvgDf} vượt quá 10 MB (cấu hình mặc định \texttt{spark.sql.autoBroadcastJoinThreshold}), Spark sẽ chuyển sang phép liên kết \texttt{SortMergeJoin} --- yêu cầu shuffle cả hai bảng theo khóa liên kết --- tốn kém hiệu năng hơn rất nhiều. Trong trường hợp cụ thể này, bảng chỉ có $\sim$36 dòng nên BroadcastHashJoin là sự lựa chọn tối ưu nhất.
 
-\subsubsection{Đếm Exchange Nodes (Shuffle)}
+\subsubsection{Đếm các nút trao đổi dữ liệu}
 
-Dựa trên physical plan thực tế, các shuffle Exchange chính gồm:
+Dựa trên kế hoạch vật lý thực tế, các nút trao đổi dữ liệu phân tán chính gồm có:
 
-\begin{center}
+\begin{table}[H]
+\centering
 \begin{tabular}{clp{6.5cm}}
 \toprule
 \textbf{\#} & \textbf{Exchange} & \textbf{Mục đích} \\
@@ -271,62 +278,67 @@ Dựa trên physical plan thực tế, các shuffle Exchange chính gồm:
 6 & \texttt{rangepartitioning(ship-city)} & Sort toàn cục output cuối. \\
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Phân tích các nút trao đổi dữ liệu và mục đích sử dụng}
+\label{tab:task2_1_exchanges}
+\end{table}
 
-\textbf{Lưu ý:} Plan còn có các \texttt{BroadcastExchange} cho \texttt{promoValidity}, \texttt{validPromotionCounts} và \texttt{stateAvgDf}; đây là trao đổi broadcast, không phải shuffle hash/range của bảng lớn.
+\textbf{Lưu ý:} Kế hoạch thực thi còn có các nút phát tán \texttt{BroadcastExchange} dành cho các bảng \texttt{promoValidity}, \texttt{validPromotionCounts} và \texttt{stateAvgDf}; đây là cơ chế phát tán bảng nhỏ, hoàn toàn khác với các phép shuffle phân tán dữ liệu của các bảng lớn.
 
-\subsubsection{Đếm Stages}
+\subsubsection{Đếm các giai đoạn thực thi}
 
-Mỗi shuffle Exchange tạo một ranh giới stage mới. Với 6 shuffle Exchange chính và 3 BroadcastExchange, pipeline kết quả có khoảng \textbf{7--9 stages} cho action ghi output; số stage thực tế có thể thay đổi vì trước đó chương trình còn các action \texttt{count()} và \texttt{show()} phục vụ logging/report.
+Mỗi nút trao đổi dữ liệu shuffle Exchange sẽ tạo ra một ranh giới phân tách giai đoạn thực thi mới. Với 6 nút shuffle Exchange chính và 3 nút BroadcastExchange, quy trình xử lý kết quả cần khoảng \textbf{7--9 giai đoạn thực thi} cho hành động ghi kết quả đầu ra; số stage thực tế có thể thay đổi nhẹ tùy theo các hành động phụ như \texttt{count()} hay \texttt{show()} phục vụ việc ghi nhật ký.
 
 \begin{enumerate}
-    \item \textbf{Stage 1:} Đọc CSV, parse date/amount, scan toàn bộ input.
-    \item \textbf{Stage 2:} Explode promotion-ids, shuffle theo \texttt{promo\_id}, tính min/max date.
-    \item \textbf{Stage 3:} Filter Merchant+Shipped, shuffle theo \texttt{ship\_state\_norm}, tính avg Amount.
-    \item \textbf{Stage 4:} Explode order promotions, join broadcast với \texttt{promoValidity}, shuffle theo \texttt{order\_row\_id}.
-    \item \textbf{Stage 5:} Filter Standard, BroadcastHashJoin với \texttt{validPromotionCounts}.
-    \item \textbf{Stage 6:} BroadcastHashJoin với \texttt{stateAvgDf}, filter Amount.
-    \item \textbf{Stage 7:} Shuffle theo \texttt{ship\_city\_norm}, tính count/cancelled.
-    \item \textbf{Stage 8:} Sort toàn cục, coalesce và ghi Parquet.
+    \item \textbf{Stage 1:} Đọc tệp CSV, phân tích ngày tháng và giá trị đơn hàng, duyệt toàn bộ dữ liệu đầu vào.
+    \item \textbf{Stage 2:} Phân rã mã khuyến mãi, shuffle theo \texttt{promo\_id}, tính toán ngày bắt đầu và kết thúc.
+    \item \textbf{Stage 3:} Lọc đơn hàng Merchant+Shipped, shuffle theo \texttt{ship\_state\_norm}, tính Amount trung bình.
+    \item \textbf{Stage 4:} Phân rã khuyến mãi đơn hàng, liên kết phát tán với \texttt{promoValidity}, shuffle theo \texttt{order\_row\_id}.
+    \item \textbf{Stage 5:} Lọc mức dịch vụ Standard, thực hiện phép liên kết BroadcastHashJoin với \texttt{validPromotionCounts}.
+    \item \textbf{Stage 6:} Thực hiện phép liên kết BroadcastHashJoin với \texttt{stateAvgDf}, lọc giá trị đơn hàng hợp lệ.
+    \item \textbf{Stage 7:} Shuffle dữ liệu theo \texttt{ship\_city\_norm}, tính tổng số đơn và đơn bị hủy.
+    \item \textbf{Stage 8:} Sắp xếp toàn cục, gộp phân vùng và ghi dữ liệu ra định dạng Parquet.
 \end{enumerate}
 
-\subsubsection{Thảo luận Adaptive Query Execution (AQE)}
+\subsubsection{Thảo luận về cơ chế tự thích ứng khi thực thi truy vấn}
 
-Trong source Task 2.1, nhóm không cấu hình \texttt{spark.sql.adaptive.enabled} một cách tường minh; chương trình dùng giá trị mặc định của Spark runtime. Với môi trường kiểm thử Spark 3.4.0, physical plan in ra \texttt{AdaptiveSparkPlan}, nghĩa là AQE đang hoạt động. AQE có thể:
+Trong mã nguồn của Task 2.1, chương trình sử dụng cấu hình mặc định của Spark runtime cho cơ chế tự thích ứng AQE (\texttt{spark.sql.adaptive.enabled}). Với môi trường thực thi Spark 3.4.0, kế hoạch vật lý hiển thị từ khóa \texttt{AdaptiveSparkPlan}, xác nhận AQE đang hoạt động và có thể mang lại các tối ưu hóa sau:
 \begin{itemize}
-    \item \textbf{Coalesce shuffle partitions:} gộp các partition nhỏ sau shuffle, giảm số task thừa.
-    \item \textbf{Convert SortMergeJoin sang BroadcastHashJoin:} nếu sau filter, một bên join nhỏ hơn threshold, AQE tự chuyển strategy.
-    \item \textbf{Optimize skewed join:} chia partition lớn thành nhiều sub-partition. Trong pipeline này, join trên \texttt{ship-state} ít bị skew vì mỗi state chỉ 1 dòng ở bảng average.
+    \item \textbf{Tự động gộp phân vùng sau khi shuffle:} gộp các phân vùng nhỏ sau shuffle, giảm số lượng task dư thừa.
+    \item \textbf{Tự động chuyển đổi phép liên kết SortMergeJoin sang BroadcastHashJoin:} nếu sau bước lọc dữ liệu, một bên của phép liên kết có kích thước nhỏ hơn ngưỡng quy định, AQE sẽ tự động chuyển đổi chiến lược liên kết để tối ưu hiệu năng.
+    \item \textbf{Tối ưu hóa các phép liên kết bị lệch dữ liệu:} tự động chia nhỏ các phân vùng bị lệch dữ liệu lớn thành nhiều phân vùng nhỏ hơn. Trong quy trình này, phép liên kết trên bang \texttt{ship-state} ít bị ảnh hưởng bởi hiện tượng lệch dữ liệu vì mỗi bang chỉ chứa duy nhất một dòng kết quả trung bình.
 \end{itemize}
 
-Trong plan minh họa ở trên, dòng \texttt{AdaptiveSparkPlan isFinalPlan=false} xuất hiện vì \texttt{resultDf.explain(true)} được gọi trước action ghi output. Ở thời điểm đó, Spark mới hiển thị adaptive plan ban đầu; AQE vẫn cần feedback runtime từ các shuffle stages để chốt final plan sau khi action như \texttt{write} hoặc \texttt{collect} được thực thi. Vì vậy trạng thái \texttt{isFinalPlan=false} không mâu thuẫn với việc AQE đang hoạt động, mà chỉ cho biết plan chưa được materialize hoàn toàn tại thời điểm gọi \texttt{explain}.
+Trong kế hoạch thực thi minh họa ở trên, dòng chữ \texttt{AdaptiveSparkPlan isFinalPlan=false} xuất hiện do lệnh \texttt{resultDf.explain(true)} được gọi trước khi thực thi hành động ghi dữ liệu đầu ra. Tại thời điểm đó, Spark mới chỉ hiển thị kế hoạch thích ứng ban đầu; AQE vẫn cần thu thập phản hồi trong lúc chạy từ các giai đoạn shuffle trước để đưa ra kế hoạch tối ưu cuối cùng sau khi hành động ghi được thực hiện. Vì vậy, trạng thái \texttt{isFinalPlan=false} hoàn toàn phản ánh đúng nguyên lý hoạt động của AQE.
 
 % ------------------------------------------------------------------
 \subsection{Kết quả thực thi \& Xuất dữ liệu}
 
 \begin{itemize}
-    \item \textbf{Đường dẫn output:} \texttt{data/output/Task\_2-1.parquet}.
-    \item \textbf{Định dạng:} Single Parquet file, readable bằng Pandas (\texttt{pd.read\_parquet}) hoặc Spark local mode.
-    \item \textbf{Số dòng kết quả:} 2,452 city groups.
-    \item \textbf{Kích thước file:} phụ thuộc vào metadata Parquet của lần ghi.
+    \item \textbf{Đường dẫn đầu ra:} \texttt{data/output/Task\_2-1.parquet}.
+    \item \textbf{Định dạng:} Tệp Parquet duy nhất, có thể đọc dễ dàng bằng thư viện Pandas (\texttt{pd.read\_parquet}) hoặc Spark ở chế độ chạy cục bộ.
+    \item \textbf{Số dòng kết quả:} 2,452 nhóm thành phố.
+    \item \textbf{Kích thước tệp:} phụ thuộc vào siêu dữ liệu Parquet của lần ghi dữ liệu thực tế.
 \end{itemize}
 
-\textbf{Bảng tổng hợp từ file Parquet đã xuất:}
-\begin{center}
+\textbf{Bảng tổng hợp trích xuất từ tệp Parquet đầu ra:}
+\begin{table}[H]
+\centering
 \begin{tabular}{lr}
 \toprule
 \textbf{Chỉ số} & \textbf{Giá trị} \\
 \midrule
-Số dòng output & 2,452 \\
-Số city distinct & 2,452 \\
+Số dòng kết quả đầu ra & 2,452 \\
+Số thành phố duy nhất & 2,452 \\
 Giá trị nhỏ nhất của \texttt{cancelled\_percentage} & 0.0 \\
 Giá trị lớn nhất của \texttt{cancelled\_percentage} & 0.0 \\
-Số city có \texttt{cancelled\_percentage > 0} & 0 \\
+Số thành phố có tỷ lệ đơn bị hủy \texttt{cancelled\_percentage > 0} & 0 \\
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Các chỉ số thống kê tổng quan trích xuất từ tệp Parquet đầu ra của Task 2.1}
+\label{tab:task2_1_summary_metrics}
+\end{table}
 
-\textbf{Sample output:}
+\textbf{Một số dòng kết quả mẫu:}
 \begin{lstlisting}[language={}]
 ship-city                                      cancelled_percentage
 (CHIKMAGALUR DISTERICT).     (N.R PUR THALUKU) 0.0
@@ -342,14 +354,16 @@ ADBHAR                                        0.0
 \end{lstlisting}
 
 \textbf{Kiểm chứng thủ công.}
-Chọn \texttt{ship-city = BENGALURU}. Sau khi áp dụng đủ ba điều kiện, truy vấn kiểm chứng thu được 1,318 order qualified, trong đó \texttt{cancelled\_orders = 0}. Các dòng mẫu đều có \texttt{ship-service-level = Standard}, \texttt{valid\_promo\_count >= 3}, và \texttt{Amount} nhỏ hơn trung bình Merchant+Shipped của state tương ứng. Do đó:
+Chọn thành phố mẫu \texttt{ship-city = BENGALURU}. Sau khi áp dụng đủ ba điều kiện lọc của đề bài, truy vấn kiểm chứng thủ công thu được 1,318 đơn hàng hợp lệ, trong đó không có đơn hàng nào mang trạng thái bị hủy (\texttt{cancelled\_orders = 0}). Các dòng đơn hàng mẫu đều thỏa mãn các mức dịch vụ Standard, số khuyến mãi hợp lệ $\geq 3$ và giá trị đơn hàng nhỏ hơn mức trung bình của bang tương ứng. Do đó:
 \[
 \texttt{cancelled\_percentage} = \frac{0}{1318} \times 100 = 0.0000
 \]
-Giá trị này khớp với output \texttt{BENGALURU, 0.0}. Toàn bộ output Task 2.1 trong lần chạy hiện tại đều có tỷ lệ 0 vì không có order qualified nào mang trạng thái \texttt{Cancelled}.
+Giá trị này khớp hoàn toàn với kết quả đầu ra \texttt{BENGALURU, 0.0}. Toàn bộ tỷ lệ hủy trong lần chạy dữ liệu hiện tại đều bằng 0 vì không có đơn hàng hợp lệ nào mang trạng thái \texttt{Cancelled}.
 
 % ------------------------------------------------------------------
 \subsection{Minh chứng bằng hình ảnh}
+
+Các hình ảnh dưới đây cung cấp minh chứng trực quan về việc chạy chương trình, kế hoạch thực thi Catalyst plan và kết quả kiểm tra tệp dữ liệu đầu ra của Task 2.1.
 
 \begin{figure}[H]
     \centering
@@ -361,13 +375,13 @@ Giá trị này khớp với output \texttt{BENGALURU, 0.0}. Toàn bộ output T
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\textwidth]{img/2-1/explain_plan.png}
-    \caption{Execution plan của Task 2.1}
+    \caption{Kế hoạch thực thi vật lý (Execution plan) của Task 2.1}
     \label{fig:task2_1_explain_plan}
 \end{figure}
 
 \begin{figure}[H]
     \centering
     \includegraphics[width=0.9\textwidth]{img/2-1/output_preview.png}
-    \caption{Một phần nội dung file \texttt{Task\_2-1.parquet}}
+    \caption{Một phần nội dung tệp Parquet kết quả đầu ra \texttt{Task\_2-1.parquet}}
     \label{fig:task2_1_output_preview}
 \end{figure}

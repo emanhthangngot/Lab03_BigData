@@ -3,54 +3,57 @@
 %================================================
 \section{Task 1.2: State-level Median Variety per Month}
 
-\subsection{Phân tích truy vấn (Query Analysis)}
-Bài toán yêu cầu tính \textbf{median variety} cấp bang cho mỗi tháng. Cụ thể, với mỗi cặp \texttt{(ship-state, month)}, ta cần xác định giá trị trung vị (median) của ``variety'' trên tập các style thỏa điều kiện đã phục vụ ít nhất một size từ XXL trở lên.
+\subsection{Phân tích truy vấn}
+Bài toán yêu cầu tính giá trị trung vị của độ đa dạng sản phẩm cấp bang cho mỗi tháng. Cụ thể, với mỗi cặp \texttt{(ship-state, month)}, ta cần xác định giá trị trung vị của ``variety'' trên tập hợp các kiểu dáng thỏa mãn điều kiện đã phục vụ ít nhất một kích cỡ từ XXL trở lên.
 
-\textbf{Định nghĩa variety.} Variety của một style trong phạm vi \texttt{(state, month)} là số lượng \texttt{SKU} phân biệt (distinct) gắn với style đó trong cùng phạm vi. Variety \textit{không phải} số order hay số size, mà là số mã sản phẩm duy nhất đã xuất hiện cho style đó tại bang và tháng xét.
+\textbf{Định nghĩa độ đa dạng.} Độ đa dạng của một kiểu dáng trong phạm vi \texttt{(state, month)} là số lượng mã sản phẩm phân biệt (\texttt{SKU}) gắn với kiểu dáng đó trong cùng phạm vi. Độ đa dạng không phải là số lượng đơn hàng hay số lượng kích cỡ, mà là số mã sản phẩm duy nhất đã xuất hiện cho kiểu dáng đó tại bang và tháng đang xét.
 
-\textbf{Điều kiện qualifying style.} Một style được xem là qualify (hợp lệ) nếu trong cùng phạm vi \texttt{(state, month, style)} tồn tại \textit{ít nhất một} record có cột \texttt{Size} thuộc nhóm từ XXL trở lên. Các size code được hỗ trợ bao gồm: \texttt{XXL}, \texttt{2XL}, \texttt{XXXL}, \texttt{3XL}, \texttt{4XL}, \texttt{5XL}, \texttt{6XL}. Ngoài ra, hàm kiểm tra trong code còn sử dụng biểu thức chính quy \texttt{([2-9]|}\textbackslash\texttt{d\{2,\})XL} để bao phủ các size lớn hơn nữa (ví dụ \texttt{7XL}, \texttt{10XL}).
+\textbf{Điều kiện kiểu dáng hợp lệ.} Một kiểu dáng được xem là hợp lệ nếu trong cùng phạm vi \texttt{(state, month, style)} tồn tại ít nhất một bản ghi có cột kích cỡ \texttt{Size} thuộc nhóm từ XXL trở lên. Các ký hiệu kích cỡ được hỗ trợ bao gồm: \texttt{XXL}, \texttt{2XL}, \texttt{XXXL}, \texttt{3XL}, \texttt{4XL}, \texttt{5XL}, \texttt{6XL}. Ngoài ra, hàm kiểm tra trong mã nguồn còn sử dụng biểu thức chính quy \texttt{([2-9]|}\textbackslash\texttt{d\{2,\})XL} để bao phủ các kích cỡ lớn hơn nữa (ví dụ \texttt{7XL}, \texttt{10XL}).
 
-\textbf{Điểm quan trọng.} Sau khi một style được xác nhận là qualify, variety của style đó vẫn phải đếm \textit{tất cả} các SKU distinct trong phạm vi \texttt{(state, month)}, kể cả các SKU có size nhỏ hơn XXL. Điều kiện size $\geq$ XXL chỉ dùng để quyết định style có được đưa vào tập tính median hay không, không dùng để lọc SKU.
+\textbf{Điểm quan trọng.} Sau khi một kiểu dáng được xác định là hợp lệ, độ đa dạng của kiểu dáng đó vẫn phải đếm tất cả các mã sản phẩm phân biệt (\texttt{SKU}) trong phạm vi \texttt{(state, month)}, kể cả các mã sản phẩm có kích cỡ nhỏ hơn XXL. Điều kiện kích cỡ $\geq$ XXL chỉ dùng để quyết định kiểu dáng có được đưa vào tập tính trung vị hay không, hoàn toàn không dùng để lọc bỏ mã sản phẩm.
 
-\textbf{Cách tính median.} Sau khi thu được danh sách variety của tất cả qualifying styles trong một \texttt{(state, month)}, danh sách này được sắp xếp tăng dần. Nếu số phần tử lẻ, median là phần tử ở vị trí giữa; nếu chẵn, median là trung bình cộng của hai phần tử giữa. Kết quả được làm tròn đến đúng 4 chữ số thập phân.
+\textbf{Cách tính trung vị.} Sau khi thu được danh sách độ đa dạng của tất cả kiểu dáng hợp lệ trong một cặp \texttt{(state, month)}, danh sách này được sắp xếp tăng dần. Nếu số lượng phần tử lẻ, giá trị trung vị là phần tử ở vị trí chính giữa; nếu chẵn, trung vị là trung bình cộng của hai phần tử ở giữa. Kết quả được làm tròn đến đúng 4 chữ số phần thập phân.
 
-\textbf{Schema output.} File kết quả \texttt{Task\_1-2.csv} có 3 cột:
+\textbf{Cấu trúc dữ liệu đầu ra.} Tệp kết quả \texttt{Task\_1-2.csv} gồm có 3 cột:
 
-\begin{center}
+\begin{table}[H]
+\centering
 \begin{tabular}{lll}
 \toprule
 \textbf{Cột} & \textbf{Kiểu dữ liệu} & \textbf{Ý nghĩa} \\
 \midrule
 \texttt{ship-state} & String & Bang/tỉnh đã chuẩn hóa viết hoa \\
 \texttt{month} & String & Tháng, định dạng \texttt{YYYY-MM} \\
-\texttt{median\_variety} & Double (4 d.p.) & Median variety của các qualifying styles \\
+\texttt{median\_variety} & Double (4 d.p.) & Giá trị trung vị của các kiểu dáng hợp lệ \\
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Định nghĩa schema tệp đầu ra Task\_1-2.csv}
+\label{tab:task1_2_schema}
+\end{table}
 
-\subsection{Phân rã thành các bước cơ bản (Decomposition)}
-Lời giải được triển khai theo tư duy MapReduce trên Spark RDD, gồm các bước sau:
+\subsection{Phân rã thành các bước cơ bản}
+Lời giải được triển khai theo tư duy MapReduce trên nền tảng Spark RDD, gồm các bước sau:
 
 \begin{enumerate}
-    \item \textbf{Đọc input và chọn cột.} Chương trình đọc file CSV bằng \texttt{sc.textFile} trên đường dẫn \texttt{file://} tuyệt đối, parse header bằng parser CSV tự viết và kiểm tra đủ 5 cột cần thiết: \texttt{Date}, \texttt{SKU}, \texttt{Style}, \texttt{Size}, \texttt{ship-state}. Các dòng thiếu một trong 5 trường này bị bỏ qua. Cột \texttt{ship-state} và \texttt{Size} được trim khoảng trắng và chuẩn hóa viết hoa. Cột \texttt{Date} được parse từ các định dạng \texttt{MM-dd-yy}, \texttt{M-d-yy}, \texttt{MM/dd/yy}, \texttt{M/d/yy} sang \texttt{YYYY-MM}; các dòng có ngày không hợp lệ bị bỏ qua.
+    \item \textbf{Đọc dữ liệu đầu vào và chọn cột.} Chương trình đọc tệp CSV bằng \texttt{sc.textFile} trên đường dẫn tuyệt đối, phân tích dòng đầu bằng bộ phân tích CSV tự viết và kiểm tra đủ 5 cột cần thiết: \texttt{Date}, \texttt{SKU}, \texttt{Style}, \texttt{Size}, \texttt{ship-state}. Các dòng thiếu một trong 5 trường này bị bỏ qua. Cột \texttt{ship-state} and \texttt{Size} được loại bỏ khoảng trắng và chuẩn hóa viết hoa. Cột \texttt{Date} được phân tích cú pháp từ các định dạng ngày sang định dạng tháng \texttt{YYYY-MM}; các dòng có ngày không hợp lệ bị bỏ qua.
 
-    \item \textbf{Map sang khóa style.} Mỗi record hợp lệ được emit thành cặp key-value với key là \texttt{(state, month, style)} và value là \texttt{(SKU, isAtLeastXXL)}. Đây là bước Map đầu tiên, phát tán dữ liệu theo khóa composite 3 thành phần để chuẩn bị cho bước gom nhóm tiếp theo.
+    \item \textbf{Ánh xạ sang khóa kiểu dáng.} Mỗi bản ghi hợp lệ được phát ra dưới dạng cặp khóa - giá trị với khóa là \texttt{(state, month, style)} và giá trị là \texttt{(SKU, isAtLeastXXL)}. Đây là bước ánh xạ đầu tiên, phát tán dữ liệu theo khóa phức hợp 3 thành phần để chuẩn bị cho bước gom nhóm tiếp theo.
 
-    \item \textbf{Reduce lần 1 -- tính variety và cờ XXL.} Sử dụng \texttt{aggregateByKey} với accumulator là một \texttt{mutable.Set[String]} (chứa các SKU distinct) và một cờ boolean \texttt{hasXXL}. Hàm \texttt{seqOp} thêm SKU vào set và OR giá trị \texttt{isAtLeastXXL} vào cờ. Hàm \texttt{combOp} hợp nhất hai set và OR hai cờ lại với nhau. Kết quả: mỗi key \texttt{(state, month, style)} cho ra \texttt{(variety = |set|, hasXXL)}.
+    \item \textbf{Bước giảm lần 1 -- tính độ đa dạng và cờ XXL.} Sử dụng phép biến đổi \texttt{aggregateByKey} với bộ tích lũy là một tập hợp động \texttt{mutable.Set[String]} (chứa các mã sản phẩm phân biệt) và một cờ nhị phân \texttt{hasXXL}. Hàm tích lũy từng dòng (\texttt{seqOp}) thêm mã sản phẩm vào tập hợp và áp dụng phép toán logic OR cho giá trị \texttt{isAtLeastXXL} vào cờ. Hàm kết hợp các phân vùng (\texttt{combOp}) hợp nhất hai tập hợp và OR hai cờ lại với nhau. Kết quả: mỗi khóa \texttt{(state, month, style)} cho ra cặp giá trị \texttt{(variety = |set|, hasXXL)}.
 
-    \item \textbf{Lọc style qualify.} Chỉ giữ lại các style có \texttt{hasXXL = true}. Bước filter này được thực hiện \textit{trước} khi đổi khóa để giảm lượng dữ liệu cần shuffle trong bước tiếp theo.
+    \item \textbf{Lọc kiểu dáng hợp lệ.} Chỉ giữ lại các kiểu dáng có \texttt{hasXXL = true}. Bước lọc này được thực hiện trước khi đổi khóa để giảm lượng dữ liệu cần phân tán qua mạng ở bước tiếp theo.
 
-    \item \textbf{Map sang khóa state-month.} Đổi key từ \texttt{(state, month, style)} thành \texttt{(state, month)}, value là \texttt{variety} (số nguyên). Thành phần \texttt{style} trong key bị loại bỏ vì từ bước này trở đi ta chỉ cần gom variety theo bang và tháng.
+    \item \textbf{Ánh xạ sang khóa bang - tháng.} Đổi khóa từ \texttt{(state, month, style)} thành khóa mới \texttt{(state, month)}, giá trị tương ứng là \texttt{variety} (số nguyên). Thành phần kiểu dáng trong khóa bị loại bỏ vì từ bước này trở đi chương trình chỉ cần gom nhóm độ đa dạng theo bang và tháng.
 
-    \item \textbf{Reduce lần 2 -- tính median.} Dùng \texttt{groupByKey} để gom tất cả variety của các qualifying styles cùng \texttt{(state, month)} thành một danh sách. Danh sách được sort tăng dần rồi truyền vào hàm \texttt{computeMedian} để tính giá trị trung vị, kết quả được format thành chuỗi 4 chữ số thập phân.
+    \item \textbf{Bước giảm lần 2 -- tính trung vị.} Sử dụng phép biến đổi \texttt{groupByKey} để gom toàn bộ độ đa dạng của các kiểu dáng hợp lệ cùng cặp \texttt{(state, month)} thành một danh sách. Danh sách này được sắp xếp tăng dần rồi chuyển qua hàm \texttt{computeMedian} để tính giá trị trung vị, kết quả cuối cùng được định dạng thành chuỗi có 4 chữ số phần thập phân.
 
-    \item \textbf{Xuất CSV.} Kết quả được \texttt{sortBy} theo \texttt{(state, month)} rồi \texttt{collect()} về driver. Chương trình dùng \texttt{PrintWriter} của Java I/O để ghi header và từng dòng kết quả ra một file CSV duy nhất, tránh tạo thư mục part files đặc trưng của Hadoop.
+    \item \textbf{Xuất tệp CSV.} Kết quả được sắp xếp theo bang và tháng (\texttt{sortBy}) rồi thu thập (\texttt{collect()}) về nút điều phối. Chương trình sử dụng thư viện \texttt{PrintWriter} của Java I/O để ghi trực tiếp dòng tiêu đề và từng dòng kết quả ra một tệp CSV duy nhất, tránh việc sinh ra thư mục chứa nhiều tệp bộ phận đặc trưng của Hadoop.
 \end{enumerate}
 
 \subsection{Lý do phân rã}
-Bài toán đòi hỏi hai tầng aggregation vì hai lý do chính. Thứ nhất, cùng một style có thể chứa cả SKU size nhỏ (S, M, L) lẫn SKU size lớn (XXL, 3XL). Nếu lọc chỉ giữ các dòng có size $\geq$ XXL trước khi đếm variety, ta sẽ mất các SKU size nhỏ và sai định nghĩa variety. Do đó, reducer đầu tiên phải \textit{đồng thời} giữ toàn bộ tập SKU distinct \textit{và} ghi nhận style đã từng phục vụ size từ XXL trở lên.
+Bài toán đòi hỏi hai tầng gom nhóm vì hai lý do chính. Thứ nhất, cùng một kiểu dáng có thể chứa cả mã sản phẩm kích cỡ nhỏ (S, M, L) lẫn mã sản phẩm kích cỡ lớn (XXL, 3XL). Nếu lọc chỉ giữ các dòng có kích cỡ $\geq$ XXL trước khi đếm độ đa dạng, ta sẽ mất các mã sản phẩm kích cỡ nhỏ và sai định nghĩa độ đa dạng. Do đó, bộ giảm đầu tiên phải đồng thời duy trì toàn bộ tập hợp các mã sản phẩm duy nhất và ghi nhận kiểu dáng đã từng phục vụ kích cỡ từ XXL trở lên.
 
-Thứ hai, bài toán yêu cầu tính median -- một phép toán toàn cục trên danh sách đã sort, không thể thực hiện bằng một phép reduce đơn giản kiểu cộng dồn. Vì vậy cần tầng aggregation thứ hai: gom tất cả variety theo \texttt{(state, month)}, sort danh sách rồi trích giá trị trung vị. Cách phân rã thành hai tầng reducer phù hợp với mô hình key-value processing vì mỗi reducer chỉ cần xử lý dữ liệu cùng key mà không phụ thuộc vào các key khác.
+Thứ hai, bài toán yêu cầu tính trung vị -- một phép toán toàn cục trên danh sách đã sắp xếp, không thể thực hiện bằng một phép reduce đơn giản kiểu cộng dồn. Vì vậy cần tầng gom nhóm thứ hai: gom tất cả độ đa dạng theo khóa \texttt{(state, month)}, sắp xếp danh sách rồi trích giá trị trung vị. Cách phân rã thành hai tầng reducer hoàn toàn phù hợp với mô hình xử lý khóa - giá trị vì mỗi bộ giảm chỉ cần xử lý dữ liệu cùng khóa mà không phụ thuộc vào các khóa khác.
 
 \subsection{Chiến lược thực thi \& Triển khai mã nguồn}
 Task 1.2 được cài đặt trong file \texttt{src/Task\_1-2/source/Task1\_2.scala}. Chương trình nhận hai tham số: đường dẫn CSV đầu vào và đường dẫn file CSV đầu ra. Toàn bộ phần xử lý chính dùng Spark RDD/key-value transformations, gồm \texttt{textFile}, \texttt{flatMap}, \texttt{aggregateByKey}, \texttt{filter}, \texttt{map}, \texttt{groupByKey}, \texttt{sortBy}; không dùng DataFrame query hoặc Spark SQL cho logic bài toán MapReduce.
@@ -76,7 +79,7 @@ def isAtLeastXXL(size: String): Boolean = {
 }
 \end{lstlisting}
 
-Hàm \texttt{isAtLeastXXL} trước tiên kiểm tra size có thuộc tập các giá trị phổ biến hay không. Nếu không, biểu thức chính quy sẽ bắt các size dạng \texttt{nXL} với $n \geq 2$ hoặc số có từ hai chữ số trở lên, đảm bảo bao phủ mọi size từ XXL trở lên mà không nhận lầm các giá trị như \texttt{XL} hay \texttt{1XL}.
+Hàm \texttt{isAtLeastXXL} trước tiên kiểm tra kích cỡ có thuộc tập các giá trị phổ biến hay không. Nếu không, biểu thức chính quy sẽ bắt các kích cỡ dạng \texttt{nXL} với $n \geq 2$ hoặc số có từ hai chữ số trở lên, đảm bảo bao phủ mọi kích cỡ từ XXL trở lên mà không nhận lầm các giá trị như \texttt{XL} hay \texttt{1XL}.
 
 \textbf{Map và Reduce lần 1 -- tính variety per style.}
 \begin{lstlisting}[language=Scala]
@@ -135,7 +138,7 @@ def computeMedian(sortedValues: List[Int]):
 }
 \end{lstlisting}
 
-\textbf{Xử lý dữ liệu lỗi.} Các dòng có giá trị null ở bất kỳ cột nào trong 5 cột cần thiết đều bị loại bằng \texttt{.na.drop()} ngay từ đầu pipeline. Hàm \texttt{parseMonth} trả về \texttt{None} khi chuỗi ngày không đúng định dạng \texttt{MM-dd-yy}, và \texttt{flatMap} tự động bỏ qua các \texttt{None} này. Cột \texttt{ship-state} và \texttt{Size} được \texttt{trim} và chuyển \texttt{toUpperCase} để chuẩn hóa, tránh trường hợp cùng một bang nhưng bị viết khác kiểu chữ (ví dụ ``Bihar'' và ``BIHAR'') dẫn đến trùng lặp key.
+\textbf{Xử lý dữ liệu lỗi.} Các dòng có giá trị null ở bất kỳ cột nào trong 5 cột cần thiết đều bị loại bỏ ngay từ đầu quy trình xử lý. Hàm \texttt{parseMonth} trả về \texttt{None} khi chuỗi ngày không đúng định dạng ngày tháng, và \texttt{flatMap} tự động bỏ qua các giá trị \texttt{None} này. Cột \texttt{ship-state} và \texttt{Size} được \texttt{trim} và chuyển \texttt{toUpperCase} để chuẩn hóa, tránh trường hợp cùng một bang nhưng bị viết khác kiểu chữ (ví dụ ``Bihar'' và ``BIHAR'') dẫn đến trùng lặp khóa.
 
 \subsection{Phân tích chuyên sâu}
 
@@ -178,7 +181,7 @@ def computeMedian(sortedValues: List[Int]):
 \end{algorithmic}
 \end{algorithm}
 
-Công thức tính median cho danh sách đã sắp xếp $V = [v_1, v_2, \ldots, v_n]$:
+Công thức tính trung vị cho danh sách đã sắp xếp $V = [v_1, v_2, \ldots, v_n]$:
 \[
 \text{median}(V) = \begin{cases}
 v_{\lceil n/2 \rceil} & \text{nếu } n \text{ lẻ} \\[4pt]
@@ -186,46 +189,46 @@ v_{\lceil n/2 \rceil} & \text{nếu } n \text{ lẻ} \\[4pt]
 \end{cases}
 \]
 
-\subsubsection{Tại sao median KHÔNG thể tính bằng Combiner đơn giản}
+\subsubsection{Tại sao trung vị KHÔNG thể tính bằng Combiner đơn giản}
 
-Trong MapReduce, Combiner cho phép giảm dữ liệu trước shuffle bằng cách thực hiện reduce cục bộ tại mỗi mapper. Tuy nhiên, Combiner chỉ hoạt động với các phép toán \textit{associative} và \textit{commutative} như sum, min, max. Median \textbf{không} thỏa tính chất này: trung vị của hai tập con không bằng trung vị của tập gộp.
+Trong mô hình MapReduce, Combiner cho phép giảm bớt dữ liệu trước bước phân tán bằng cách thực hiện tính toán giảm cục bộ tại mỗi tiến trình ánh xạ. Tuy nhiên, Combiner chỉ hoạt động hiệu quả với các phép toán mang tính chất kết hợp và giao hoán như sum, min, max. Trung vị \textbf{không} thỏa mãn các tính chất này: trung vị của hai tập hợp con không bằng trung vị của tập hợp gộp.
 
-\textbf{Ví dụ:} Partition A có variety $[1, 3, 5]$, median = 3. Partition B có variety $[2, 4]$, median = 3. Nhưng tập gộp $[1, 2, 3, 4, 5]$ có median = 3 --- trùng trong ví dụ này nhưng không đảm bảo trong trường hợp tổng quát (ví dụ A = $[1, 10]$, B = $[2, 3]$: median A = 5.5, median B = 2.5, nhưng median gộp = 2.5).
+\textbf{Ví dụ:} Phân vùng A có độ đa dạng $[1, 3, 5]$, giá trị trung vị = 3. Phân vùng B có độ đa dạng $[2, 4]$, trung vị = 3. Nhưng tập hợp gộp $[1, 2, 3, 4, 5]$ có trung vị = 3 --- mặc dù trùng hợp trong ví dụ này nhưng không được đảm bảo trong trường hợp tổng quát (ví dụ nếu A = $[1, 10]$, B = $[2, 3]$: trung vị A = 5.5, trung vị B = 2.5, nhưng trung vị gộp = 2.5).
 
-Do đó, bước Reduce 2 phải dùng \texttt{groupByKey} (không phải \texttt{reduceByKey}) để gom toàn bộ danh sách variety về cùng reducer, sort rồi trích vị trí giữa. Đây là chi phí bắt buộc: shuffle toàn bộ variety values.
+Do đó, bước Reduce 2 bắt buộc phải sử dụng \texttt{groupByKey} (không phải \texttt{reduceByKey}) để gom toàn bộ danh sách độ đa dạng về cùng một bộ giảm, tiến hành sắp xếp rồi trích vị trí giữa. Đây là chi phí hiệu năng bắt buộc để truyền tải toàn bộ các giá trị độ đa dạng qua mạng.
 
-\subsubsection{Chiến lược tính median trong MapReduce context}
+\subsubsection{Chiến lược tính trung vị trong mô hình MapReduce}
 
-Lời giải áp dụng chiến lược \textbf{two-pass aggregation}:
+Lời giải áp dụng chiến lược \textbf{quy trình gom nhóm hai bước}:
 
 \begin{enumerate}
-    \item \textbf{Pass 1} (\texttt{aggregateByKey}): Gom theo \texttt{(state, month, style)} để tính variety = $|$distinct SKU$|$ và cờ hasXXL. \texttt{aggregateByKey} cho phép dùng accumulator \texttt{mutable.Set} --- hiệu quả hơn \texttt{groupByKey} vì chỉ cần duy trì set thay vì gom toàn bộ list.
-    \item \textbf{Pass 2} (\texttt{groupByKey}): Gom theo \texttt{(state, month)} để thu tất cả variety, sort rồi tính median. Ở pass này, \texttt{groupByKey} là bắt buộc vì median cần toàn bộ danh sách đã sort.
+    \item \textbf{Bước 1} (\texttt{aggregateByKey}): Gom nhóm theo \texttt{(state, month, style)} để tính độ đa dạng (độ đa dạng bằng $|$distinct SKU$|$) và cờ đánh dấu \texttt{hasXXL}. \texttt{aggregateByKey} cho phép sử dụng tập hợp động \texttt{mutable.Set} làm bộ tích lũy --- hiệu quả hơn \texttt{groupByKey} vì chỉ cần duy trì tập hợp duy nhất thay vì gom toàn bộ danh sách.
+    \item \textbf{Bước 2} (\texttt{groupByKey}): Gom nhóm theo \texttt{(state, month)} để thu thập tất cả các giá trị độ đa dạng, sắp xếp rồi tính trung vị. Ở bước này, \texttt{groupByKey} là bắt buộc vì phép tính trung vị cần toàn bộ danh sách đã được sắp xếp.
 \end{enumerate}
 
-Lý do không dùng \texttt{TreeMap/SortedMap} trong reducer: trong Spark RDD context, \texttt{aggregateByKey} với SortedMap vẫn phải merge các map từ các partition --- chi phí merge $O(k \log k)$ tương đương sort sau groupByKey, nhưng phức tạp hóa code và tăng bộ nhớ do phải duy trì cấu trúc cây trong accumulator.
+Lý do không sử dụng \texttt{TreeMap/SortedMap} trong bộ giảm: trong ngữ cảnh Spark RDD, phép \texttt{aggregateByKey} với SortedMap vẫn phải thực hiện trộn các cấu trúc map từ các phân vùng khác nhau --- chi phí trộn $O(k \log k)$ tương đương với sắp xếp sau khi chạy \texttt{groupByKey}, nhưng lại làm phức tạp hóa mã nguồn và tăng mức tiêu thụ bộ nhớ do phải duy trì cấu trúc cây trong bộ tích lũy.
 
-\subsubsection{Cách xác định ``size $\geq$ XXL'' --- parsing logic}
+\subsubsection{Cách xác định ``kích cỡ $\geq$ XXL'' --- logic phân tích}
 
-Hàm \texttt{isAtLeastXXL} kiểm tra size theo hai bước:
+Hàm \texttt{isAtLeastXXL} kiểm tra kích cỡ của sản phẩm theo hai bước:
 \begin{enumerate}
-    \item \textbf{Exact match}: So khớp trực tiếp với tập \texttt{\{XXL, 2XL, XXXL, 3XL, 4XL, 5XL, 6XL\}} sau khi \texttt{trim.toUpperCase}.
-    \item \textbf{Regex fallback}: Pattern \texttt{([2-9]|}\textbackslash\texttt{d\{2,\})XL} bắt các size dạng $n$XL với $n \geq 2$ hoặc $n$ có từ 2 chữ số trở lên (ví dụ 10XL, 12XL).
+    \item \textbf{So khớp trực tiếp}: So khớp trực tiếp với tập hợp định sẵn \texttt{\{XXL, 2XL, XXXL, 3XL, 4XL, 5XL, 6XL\}} sau khi loại bỏ khoảng trắng và chuyển chữ hoa.
+    \item \textbf{Biểu thức chính quy}: Biểu thức \texttt{([2-9]|}\textbackslash\texttt{d\{2,\})XL} bắt các kích cỡ dạng $n$XL với $n \geq 2$ hoặc $n$ có từ 2 chữ số trở lên (ví dụ 10XL, 12XL).
 \end{enumerate}
 
-Thứ tự quan trọng: kiểm tra Set trước (O(1) lookup) vì đa số cases rơi vào đây; regex chỉ là fallback cho các size hiếm gặp. Lưu ý \texttt{XL} (chỉ 1 chữ X) và \texttt{1XL} đều \textbf{không} qualify vì không khớp Set và regex yêu cầu $n \geq 2$.
+Thứ tự kiểm tra này rất quan trọng: kiểm tra trong tập hợp trước (chi phí $O(1)$) vì đa số các trường hợp dữ liệu thực tế rơi vào đây; biểu thức chính quy chỉ đóng vai trò dự phòng cho các kích cỡ hiếm gặp hơn. Lưu ý kích cỡ \texttt{XL} (chỉ có 1 chữ X) và \texttt{1XL} đều \textbf{không} hợp lệ vì không khớp với tập hợp định sẵn và biểu thức chính quy yêu cầu hệ số $n \geq 2$.
 
 \subsection{Kết quả thực thi \& Xuất dữ liệu}
-File output đã được tạo tại \texttt{data/output/Task\_1-2.csv}. Thông tin chi tiết:
+Tệp kết quả đầu ra đã được tạo tại \texttt{data/output/Task\_1-2.csv}. Thông tin chi tiết:
 
 \begin{itemize}
-    \item Đường dẫn output: \texttt{data/output/Task\_1-2.csv}.
-    \item Số dòng bao gồm header: 129.
-    \item Số dòng kết quả không tính header: 128.
-    \item Kích thước file: 3,270 bytes.
+    \item Đường dẫn kết quả: \texttt{data/output/Task\_1-2.csv}.
+    \item Số dòng bao gồm dòng tiêu đề: 129.
+    \item Số dòng kết quả thực tế: 128.
+    \item Kích thước tệp: 3,270 bytes.
 \end{itemize}
 
-\textbf{Một số dòng đầu của output:}
+\textbf{Một số dòng đầu của kết quả đầu ra:}
 \begin{lstlisting}[language={}]
 ship-state,month,median_variety
 ANDAMAN & NICOBAR,2022-04,1.0000
@@ -239,9 +242,10 @@ ARUNACHAL PRADESH,2022-04,1.0000
 ASSAM,2022-04,2.0000
 \end{lstlisting}
 
-\textbf{Kiểm chứng thủ công.} Chọn trường hợp \texttt{ship-state = CHANDIGARH}, \texttt{month = 2022-03} làm mẫu kiểm tra. Sau khi lọc trực tiếp trên file dữ liệu gốc \texttt{Amazon Sale Report.csv}, ta thu được đúng 1 record:
+\textbf{Kiểm chứng thủ công.} Chọn trường hợp bang \texttt{CHANDIGARH} và tháng \texttt{2022-03} làm mẫu kiểm tra. Sau khi lọc trực tiếp trên file dữ liệu gốc \texttt{Amazon Sale Report.csv}, ta thu được đúng 1 bản ghi:
 
-\begin{center}
+\begin{table}[H]
+\centering
 \begin{tabular}{llll}
 \toprule
 \textbf{Date} & \textbf{Style} & \textbf{SKU} & \textbf{Size} \\
@@ -249,12 +253,14 @@ ASSAM,2022-04,2.0000
 03-31-22 & JNE3758 & JNE3758-KR-XXXL & 3XL \\
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{Dữ liệu đơn hàng gốc tại bang Chandigarh vào tháng 03-2022 để kiểm chứng}
+\label{tab:task1_2_manual_check}
+\end{table}
 
-Phân tích: chỉ có 1 style (\texttt{JNE3758}) với 1 SKU distinct, do đó variety = 1. Style này có size \texttt{3XL} $\geq$ XXL nên qualify. Danh sách variety hợp lệ: $[1]$. Median của tập $[1]$ bằng $1.0000$. Kết quả này khớp hoàn toàn với dòng tương ứng trong file output: \texttt{CHANDIGARH,2022-03,1.0000}, xác nhận logic MapReduce hoạt động chính xác.
+Phân tích: chỉ có 1 kiểu dáng (\texttt{JNE3758}) với 1 mã sản phẩm phân biệt, do đó độ đa dạng variety = 1. Kiểu dáng này có kích cỡ \texttt{3XL} $\geq$ XXL nên hợp lệ. Danh sách độ đa dạng hợp lệ: $[1]$. Giá trị trung vị của tập $[1]$ bằng $1.0000$. Kết quả này khớp hoàn toàn với dòng tương ứng trong tệp kết quả đầu ra: \texttt{CHANDIGARH,2022-03,1.0000}, xác nhận logic MapReduce hoạt động chính xác.
 
 \subsection{Minh chứng bằng hình ảnh}
-Các hình dưới đây là minh chứng chạy chương trình, preview output và kiểm chứng thủ công cho Task 1.2.
+Các hình dưới đây là minh chứng chạy chương trình, xem trước kết quả đầu ra và kiểm chứng thủ công cho Task 1.2.
 
 \begin{figure}[H]
     \centering

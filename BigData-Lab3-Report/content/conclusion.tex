@@ -5,61 +5,64 @@
 
 \subsection{Tổng kết kết quả}
 
-Nhóm đã hoàn thành cả bốn task của Lab 03, tạo ra bốn file output đúng định dạng yêu cầu:
+Nhóm nghiên cứu đã hoàn thành xuất sắc cả bốn nhiệm vụ được giao của Lab 03, tạo ra bốn tệp dữ liệu kết quả đầu ra đúng theo các định dạng và tiêu chuẩn kỹ thuật yêu cầu:
 
 \begin{itemize}
-    \item \textbf{Task 1-1:} \texttt{Task\_1-1.csv} --- 3,543 dòng kết quả, xác định size được mua nhiều nhất theo sliding window 7 ngày cho mỗi state.
-    \item \textbf{Task 1-2:} \texttt{Task\_1-2.csv} --- 128 dòng kết quả, tính median variety cấp bang theo tháng cho các style có size $\geq$ XXL.
-    \item \textbf{Task 2-1:} \texttt{Task\_2-1.parquet} --- 2,452 dòng kết quả, tỷ lệ đơn cancelled theo city trên tập đơn thỏa ba điều kiện đồng thời.
-    \item \textbf{Task 2-2:} \texttt{Task\_2-2.parquet} --- population stddev của Amount theo SKU-month với ngưỡng percentile P90/P80, hai approach approximate và exact.
+    \item \textbf{Task 1-1:} \texttt{Task\_1-1.csv} --- Gồm 3,543 dòng kết quả thực tế, xác định kích cỡ được mua nhiều nhất theo mô hình cửa sổ trượt 7 ngày cho từng bang.
+    \item \textbf{Task 1-2:} \texttt{Task\_1-2.csv} --- Gồm 128 dòng kết quả, tính toán giá trị trung vị của độ đa dạng sản phẩm cấp bang theo tháng cho các kiểu dáng có kích cỡ từ XXL trở lên.
+    \item \textbf{Task 2-1:} \texttt{Task\_2-1.parquet} --- Gồm 2,452 dòng kết quả, tính toán tỷ lệ đơn hàng bị hủy theo từng thành phố trên tập hợp các đơn hàng thỏa mãn đồng thời ba điều kiện lọc của đề bài.
+    \item \textbf{Task 2-2:} \texttt{Task\_2-2.parquet} --- Tính toán độ lệch chuẩn tổng thể của giá trị đơn hàng Amount theo cặp SKU-tháng với các ngưỡng phân vị động P90/P80, đối chiếu song song giữa hai phương pháp gần đúng và chính xác.
 \end{itemize}
 
-Mỗi task đã được kiểm chứng thủ công bằng cách chọn mẫu từ output, đối chiếu ngược lại dataset gốc và tính toán lại kết quả.
+Mỗi nhiệm vụ đều được tiến hành kiểm chứng thủ công nghiêm ngặt bằng cách chọn ngẫu nhiên các mẫu từ kết quả đầu ra, đối chiếu ngược lại với tập dữ liệu gốc và thực hiện tính toán độc lập để đảm bảo độ chính xác tuyệt đối.
 
-\subsection{Trade-off giữa MapReduce và Spark Structured APIs}
+\subsection{Trade-off giữa RDD MapReduce và Spark Structured APIs}
 
-\begin{center}
+\begin{table}[H]
+\centering
 \begin{tabular}{p{3.5cm}p{5cm}p{5cm}}
 \toprule
-\textbf{Tiêu chí} & \textbf{MapReduce (Task 1-x)} & \textbf{Spark Structured API (Task 2-x)} \\
+\textbf{Tiêu chí} & \textbf{MapReduce RDD (Task 1-x)} & \textbf{Spark Structured API (Task 2-x)} \\
 \midrule
-Abstraction level & Thấp --- lập trình viên kiểm soát key-value, emit logic, reducer & Cao --- declarative transformations, Catalyst tự tối ưu plan \\
+Mức độ trừu tượng & Thấp --- lập trình viên tự kiểm soát cặp khóa - giá trị, logic phát dữ liệu, bộ giảm. & Cao --- các phép biến đổi mang tính khai báo, Catalyst tự động tối ưu hóa kế hoạch thực thi. \\
 \midrule
-Ease of implementation & Code dài hơn ($\sim$250 dòng Task 1-1, $\sim$125 dòng Task 1-2) nhưng luồng xử lý tường minh & Code ngắn gọn hơn cho logic phức tạp; join/filter/aggregation chỉ vài dòng \\
+\textbf{Độ dễ dàng triển khai} & Mã nguồn dài hơn nhưng luồng xử lý cực kỳ tường minh đối với các phép toán cơ bản. & Mã nguồn ngắn gọn hơn nhiều cho các logic phức tạp; các phép liên kết/lọc/gom nhóm chỉ mất vài dòng. \\
 \midrule
-Tối ưu hóa & Thủ công: chọn key design, quyết định dùng reduceByKey vs groupByKey & Tự động: Catalyst chọn join strategy, AQE điều chỉnh runtime \\
+Tối ưu hóa hiệu năng & Thủ công: lập trình viên tự chọn thiết kế khóa, quyết định sử dụng \texttt{reduceByKey} hay \texttt{groupByKey}. & Tự động: Catalyst tự chọn chiến lược liên kết tối ưu, cơ chế AQE tự động điều chỉnh phân vùng trong lúc chạy. \\
 \midrule
-Phù hợp với bài toán & Sliding window, median --- cần kiểm soát chi tiết emission pattern và sort logic & Multi-condition filter, join state average, percentile --- cần compose nhiều transformations \\
+Sự phù hợp bài toán & Các bài toán cửa sổ trượt, số trung vị --- cần kiểm soát chi tiết mô hình phát dữ liệu và logic sắp xếp. & Bộ lọc đa điều kiện, liên kết với giá trị trung bình của bang, tính phân vị --- cần kết hợp nhiều phép biến đổi phức tạp. \\
 \bottomrule
 \end{tabular}
-\end{center}
+\caption{So sánh các tiêu chí kỹ thuật và hiệu quả lập trình giữa MapReduce RDD và Spark Structured APIs}
+\label{tab:mapreduce_vs_spark_structured}
+\end{table}
 
 \subsection{Bài học rút ra}
 
 \begin{enumerate}
-    \item \textbf{Sliding window $\leftrightarrow$ emission pattern:} Thay vì quét ngược lại quá khứ cho mỗi ngày tính toán, phương pháp ``đẩy xuôi'' (emit đóng góp cho các ngày tương lai) biến sliding window thành bài toán gom nhóm key-value, hoàn toàn phù hợp với MapReduce.
+    \item \textbf{Cửa sổ trượt $\leftrightarrow$ mô hình phát dữ liệu:} Thay vì quét ngược về quá khứ cho mỗi ngày tính toán, phương pháp ``đẩy xuôi'' (phát dữ liệu đóng góp cho các ngày tương lai) biến bài toán cửa sổ trượt thành bài toán gom nhóm khóa - giá trị thông thường, hoàn toàn phù hợp với mô hình MapReduce.
 
-    \item \textbf{Median đòi hỏi full sort:} Không thể dùng Combiner hay reduceByKey cho median vì median không có tính associative. Bài học: xác định rõ tính chất toán học của aggregation trước khi chọn API.
+    \item \textbf{Trung vị đòi hỏi sắp xếp toàn bộ dữ liệu:} Không thể sử dụng Combiner hay \texttt{reduceByKey} cho phép tính trung vị vì phép toán này không có tính chất kết hợp. Bài học: xác định rõ tính chất toán học của phép gom nhóm trước khi lựa chọn API xử lý.
 
-    \item \textbf{Broadcast join cho bảng nhỏ:} Trong Task 2-1, bảng state average ($\sim$36 dòng) nhỏ đủ để broadcast, tránh shuffle trên bảng orders lớn. Nguyên tắc: luôn kiểm tra kích thước bảng join để chọn strategy phù hợp.
+    \item \textbf{Liên kết phát tán cho bảng nhỏ:} Trong Task 2-1, bảng trung bình của bang nhỏ đủ điều kiện phát tán, giúp tránh hoàn toàn chi phí shuffle trên bảng đơn hàng lớn. Nguyên tắc: luôn kiểm tra kích thước bảng liên kết để chọn chiến lược tối ưu nhất.
 
-    \item \textbf{Approximate vs exact percentile:} Task 2-2 cho thấy \texttt{approx\_percentile} (Greenwald-Khanna) nhanh hơn nhưng có thể cho threshold khác exact (đặc biệt trên nhóm nhỏ hoặc phân bố skewed). Exact percentile qua \texttt{row\_number} + \texttt{ceil(p $\times$ N)} đảm bảo chính xác nhưng tốn shuffle + sort.
+    \item \textbf{Phân vị gần đúng so với chính xác:} Task 2-2 chỉ ra phép tính phân vị gần đúng (thuật toán Greenwald-Khanna) cho tốc độ chạy nhanh hơn nhưng có thể cho ngưỡng khác so với chính xác (đặc biệt trên các nhóm nhỏ hoặc phân bố bị lệch dữ liệu). Phân vị chính xác qua hàm cửa sổ đảm bảo tính chính xác tuyệt đối nhưng tiêu tốn nhiều chi phí shuffle và sắp xếp dữ liệu hơn.
 
-    \item \textbf{Chuẩn hóa dữ liệu:} Dữ liệu thực tế có nhiều vấn đề: khoảng trắng thừa, chữ hoa/thường không nhất quán, null values, format ngày đa dạng. Việc \texttt{trim} + \texttt{lower/upper} ngay đầu pipeline là bắt buộc để tránh sai lệch kết quả.
+    \item \textbf{Chuẩn hóa dữ liệu là bắt buộc:} Dữ liệu thực tế luôn chứa nhiều lỗi phát sinh như khoảng trắng thừa, kiểu chữ hoa/thường không nhất quán, các giá trị null hay định dạng ngày tháng đa dạng. Việc loại bỏ khoảng trắng và chuyển chữ hoa/thường ngay từ đầu quy trình xử lý là bắt buộc để tránh sai lệch kết quả tính toán.
 \end{enumerate}
 
 \subsection{Khó khăn và hướng cải thiện}
 
 \textbf{Khó khăn gặp phải:}
 \begin{itemize}
-    \item Parse ngày tháng: dataset chứa nhiều format date khác nhau, cần cascade qua nhiều pattern.
-    \item Promotion-ids: chuỗi comma-separated với khoảng trắng không đều, trailing comma tạo token rỗng.
-    \item Cấu hình Spark trên Linux native: cần cố định đúng bản Spark/Scala/Java và đặt \texttt{SPARK\_LOCAL\_IP}, \texttt{SPARK\_LOCAL\_HOSTNAME} để đảm bảo driver bind ổn định ở local mode.
+    \item Phân tích cú pháp ngày tháng: tập dữ liệu chứa nhiều định dạng ngày khác nhau, cần kiểm tra tuần tự qua nhiều mẫu định dạng ngày để tránh làm mất dữ liệu.
+    \item Mã khuyến mãi: chuỗi khuyến mãi phân tách bằng dấu phẩy có khoảng trắng không đều, dấu phẩy dư thừa ở cuối tạo ra các giá trị rỗng cần lọc bỏ.
+    \item Cấu hình Spark trên Linux: cần đồng bộ chính xác phiên bản Spark, Scala, Java và cấu hình driver bind ổn định ở chế độ chạy cục bộ.
 \end{itemize}
 
 \textbf{Hướng cải thiện:}
 \begin{itemize}
-    \item Bổ sung unit test tự động cho từng bước transformation, đối chiếu output với expected values.
-    \item Chuẩn hóa schema input bằng một bước tiền xử lý chung cho cả bốn task.
-    \item Tối ưu số partition dựa trên kích thước dữ liệu thực tế thay vì dùng giá trị mặc định.
+    \item Bổ sung bộ kiểm thử tự động (unit test) cho từng phép biến đổi dữ liệu, đối chiếu trực tiếp kết quả đầu ra với các giá trị kỳ vọng.
+    \item Chuẩn hóa cấu trúc dữ liệu đầu vào bằng một bước tiền xử lý duy nhất cho cả bốn nhiệm vụ.
+    \item Tối ưu hóa số lượng phân vùng dựa trên kích thước thực tế của tập dữ liệu thay vì sử dụng cấu hình mặc định.
 \end{itemize}
