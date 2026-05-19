@@ -23,8 +23,7 @@
 - **Tên file:** `Task_2-1.parquet`
 - **Định dạng:** Parquet (Single file)
 - **Schema:**
-  - `ship-city` (String): Tên thành phố.
-  - `ship-state` (String): Tên bang (để tránh trùng lặp thành phố giữa các bang).
+  - `ship-city` (String): Tên thành phố đã chuẩn hóa.
   - `cancelled_percentage` (Double): Tỷ lệ phần trăm đơn hàng bị hủy thỏa mãn các điều kiện phức hợp.
 
 ## 4. Task 2-2 (Spark Structured API)

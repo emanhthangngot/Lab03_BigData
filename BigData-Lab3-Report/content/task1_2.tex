@@ -8,7 +8,7 @@ Bài toán yêu cầu tính \textbf{median variety} cấp bang cho mỗi tháng.
 
 \textbf{Định nghĩa variety.} Variety của một style trong phạm vi \texttt{(state, month)} là số lượng \texttt{SKU} phân biệt (distinct) gắn với style đó trong cùng phạm vi. Variety \textit{không phải} số order hay số size, mà là số mã sản phẩm duy nhất đã xuất hiện cho style đó tại bang và tháng xét.
 
-\textbf{Điều kiện qualifying style.} Một style được xem là qualify (hợp lệ) nếu trong cùng phạm vi \texttt{(state, month, style)} tồn tại \textit{ít nhất một} record có cột \texttt{Size} thuộc nhóm từ XXL trở lên. Các size code được hỗ trợ bao gồm: \texttt{XXL}, \texttt{2XL}, \texttt{XXXL}, \texttt{3XL}, \texttt{4XL}, \texttt{5XL}, \texttt{6XL}. Ngoài ra, hàm kiểm tra trong code còn sử dụng biểu thức chính quy \verb|([2-9]|\d{2,})XL| để bao phủ các size lớn hơn nữa (ví dụ \texttt{7XL}, \texttt{10XL}).
+\textbf{Điều kiện qualifying style.} Một style được xem là qualify (hợp lệ) nếu trong cùng phạm vi \texttt{(state, month, style)} tồn tại \textit{ít nhất một} record có cột \texttt{Size} thuộc nhóm từ XXL trở lên. Các size code được hỗ trợ bao gồm: \texttt{XXL}, \texttt{2XL}, \texttt{XXXL}, \texttt{3XL}, \texttt{4XL}, \texttt{5XL}, \texttt{6XL}. Ngoài ra, hàm kiểm tra trong code còn sử dụng biểu thức chính quy \texttt{([2-9]|}\textbackslash\texttt{d\{2,\})XL} để bao phủ các size lớn hơn nữa (ví dụ \texttt{7XL}, \texttt{10XL}).
 
 \textbf{Điểm quan trọng.} Sau khi một style được xác nhận là qualify, variety của style đó vẫn phải đếm \textit{tất cả} các SKU distinct trong phạm vi \texttt{(state, month)}, kể cả các SKU có size nhỏ hơn XXL. Điều kiện size $\geq$ XXL chỉ dùng để quyết định style có được đưa vào tập tính median hay không, không dùng để lọc SKU.
 
@@ -32,7 +32,7 @@ Bài toán yêu cầu tính \textbf{median variety} cấp bang cho mỗi tháng.
 Lời giải được triển khai theo tư duy MapReduce trên Spark RDD, gồm các bước sau:
 
 \begin{enumerate}
-    \item \textbf{Đọc input và chọn cột.} Chương trình đọc file CSV bằng \texttt{spark.read.csv} với header. Chỉ giữ lại 5 cột cần thiết: \texttt{Date}, \texttt{SKU}, \texttt{Style}, \texttt{Size}, \texttt{ship-state}. Các dòng có bất kỳ cột nào bị null đều bị loại bằng \texttt{.na.drop()}. Cột \texttt{ship-state} và \texttt{Size} được trim khoảng trắng và chuẩn hóa viết hoa. Cột \texttt{Date} được parse từ định dạng \texttt{MM-dd-yy} sang \texttt{YYYY-MM}; các dòng có ngày không hợp lệ bị bỏ qua.
+    \item \textbf{Đọc input và chọn cột.} Chương trình đọc file CSV bằng \texttt{sc.textFile} trên đường dẫn \texttt{file://} tuyệt đối, parse header bằng parser CSV tự viết và kiểm tra đủ 5 cột cần thiết: \texttt{Date}, \texttt{SKU}, \texttt{Style}, \texttt{Size}, \texttt{ship-state}. Các dòng thiếu một trong 5 trường này bị bỏ qua. Cột \texttt{ship-state} và \texttt{Size} được trim khoảng trắng và chuẩn hóa viết hoa. Cột \texttt{Date} được parse từ các định dạng \texttt{MM-dd-yy}, \texttt{M-d-yy}, \texttt{MM/dd/yy}, \texttt{M/d/yy} sang \texttt{YYYY-MM}; các dòng có ngày không hợp lệ bị bỏ qua.
 
     \item \textbf{Map sang khóa style.} Mỗi record hợp lệ được emit thành cặp key-value với key là \texttt{(state, month, style)} và value là \texttt{(SKU, isAtLeastXXL)}. Đây là bước Map đầu tiên, phát tán dữ liệu theo khóa composite 3 thành phần để chuẩn bị cho bước gom nhóm tiếp theo.
 
@@ -53,7 +53,7 @@ Bài toán đòi hỏi hai tầng aggregation vì hai lý do chính. Thứ nhấ
 Thứ hai, bài toán yêu cầu tính median -- một phép toán toàn cục trên danh sách đã sort, không thể thực hiện bằng một phép reduce đơn giản kiểu cộng dồn. Vì vậy cần tầng aggregation thứ hai: gom tất cả variety theo \texttt{(state, month)}, sort danh sách rồi trích giá trị trung vị. Cách phân rã thành hai tầng reducer phù hợp với mô hình key-value processing vì mỗi reducer chỉ cần xử lý dữ liệu cùng key mà không phụ thuộc vào các key khác.
 
 \subsection{Chiến lược thực thi \& Triển khai mã nguồn}
-Task 1.2 được cài đặt trong file \texttt{src/Task\_1-2/source/Task1\_2.scala}. Chương trình nhận hai tham số: đường dẫn CSV đầu vào và đường dẫn file CSV đầu ra. Logic chính dùng Spark RDD transformations bao gồm \texttt{flatMap}, \texttt{aggregateByKey}, \texttt{filter}, \texttt{map}, \texttt{groupByKey}, \texttt{sortBy}; phần đọc CSV dùng DataFrame API chỉ để parse header và chọn cột, sau đó chuyển sang RDD ngay lập tức.
+Task 1.2 được cài đặt trong file \texttt{src/Task\_1-2/source/Task1\_2.scala}. Chương trình nhận hai tham số: đường dẫn CSV đầu vào và đường dẫn file CSV đầu ra. Toàn bộ phần xử lý chính dùng Spark RDD/key-value transformations, gồm \texttt{textFile}, \texttt{flatMap}, \texttt{aggregateByKey}, \texttt{filter}, \texttt{map}, \texttt{groupByKey}, \texttt{sortBy}; không dùng DataFrame query hoặc Spark SQL cho logic bài toán MapReduce.
 
 \textbf{Lệnh chạy mẫu:}
 \begin{lstlisting}[language=bash]
@@ -80,30 +80,25 @@ Hàm \texttt{isAtLeastXXL} trước tiên kiểm tra size có thuộc tập các
 
 \textbf{Map và Reduce lần 1 -- tính variety per style.}
 \begin{lstlisting}[language=Scala]
-val mapped = df.select("Date", "SKU", "Style", "Size",
-                       "ship-state")
-  .na.drop().rdd
-  .flatMap(row => {
-    val dateStr = row.getAs[String]("Date")
-    val sku     = row.getAs[String]("SKU")
-    val style   = row.getAs[String]("Style")
-    val size    = row.getAs[String]("Size").trim.toUpperCase
-    val state   = row.getAs[String]("ship-state")
-                     .trim.toUpperCase
-    parseMonth(dateStr).map(month =>
-      ((state, month, style), (sku, isAtLeastXXL(size)))
-    )
-  })
+val mapped = dataLines.flatMap(line => {
+  val fields = parseCsvLine(line)
+  val dateStr = field(fields, col.date).trim
+  val sku     = field(fields, col.sku).trim
+  val style   = field(fields, col.style).trim
+  val size    = field(fields, col.size).trim.toUpperCase
+  val state   = field(fields, col.state).trim.toUpperCase
+  if (dateStr.isEmpty || sku.isEmpty || style.isEmpty ||
+      size.isEmpty || state.isEmpty) None
+  else parseMonth(dateStr).map(month =>
+    ((state, month, style), (sku, isAtLeastXXL(size))))
+})
 
-val styleVariety = mapped.aggregateByKey(
-    (scala.collection.mutable.Set.empty[String], false))(
+val styleVariety = mapped.aggregateByKey((Set.empty[String], false))(
   (acc, value) => {
-    acc._1 += value._1
-    (acc._1, acc._2 || value._2)
+    (acc._1 + value._1, acc._2 || value._2)
   },
   (acc1, acc2) => {
-    acc1._1 ++= acc2._1
-    (acc1._1, acc1._2 || acc2._2)
+    (acc1._1 ++ acc2._1, acc1._2 || acc2._2)
   }
 ).map {
   case ((state, month, _), (skuSet, hasXXL)) =>
@@ -215,7 +210,7 @@ Lý do không dùng \texttt{TreeMap/SortedMap} trong reducer: trong Spark RDD co
 Hàm \texttt{isAtLeastXXL} kiểm tra size theo hai bước:
 \begin{enumerate}
     \item \textbf{Exact match}: So khớp trực tiếp với tập \texttt{\{XXL, 2XL, XXXL, 3XL, 4XL, 5XL, 6XL\}} sau khi \texttt{trim.toUpperCase}.
-    \item \textbf{Regex fallback}: Pattern \verb|([2-9]|\d{2,})XL| bắt các size dạng $n$XL với $n \geq 2$ hoặc $n$ có từ 2 chữ số trở lên (ví dụ 10XL, 12XL).
+    \item \textbf{Regex fallback}: Pattern \texttt{([2-9]|}\textbackslash\texttt{d\{2,\})XL} bắt các size dạng $n$XL với $n \geq 2$ hoặc $n$ có từ 2 chữ số trở lên (ví dụ 10XL, 12XL).
 \end{enumerate}
 
 Thứ tự quan trọng: kiểm tra Set trước (O(1) lookup) vì đa số cases rơi vào đây; regex chỉ là fallback cho các size hiếm gặp. Lưu ý \texttt{XL} (chỉ 1 chữ X) và \texttt{1XL} đều \textbf{không} qualify vì không khớp Set và regex yêu cầu $n \geq 2$.
@@ -259,31 +254,25 @@ ASSAM,2022-04,2.0000
 Phân tích: chỉ có 1 style (\texttt{JNE3758}) với 1 SKU distinct, do đó variety = 1. Style này có size \texttt{3XL} $\geq$ XXL nên qualify. Danh sách variety hợp lệ: $[1]$. Median của tập $[1]$ bằng $1.0000$. Kết quả này khớp hoàn toàn với dòng tương ứng trong file output: \texttt{CHANDIGARH,2022-03,1.0000}, xác nhận logic MapReduce hoạt động chính xác.
 
 \subsection{Minh chứng bằng hình ảnh}
-Các hình dưới đây được đặt trong thư mục \texttt{img/1-2} theo đúng tên file quy ước.
+Các hình dưới đây là minh chứng chạy chương trình, preview output và kiểm chứng thủ công cho Task 1.2.
 
 \begin{figure}[H]
     \centering
-    \IfFileExists{img/1-2/run_success.png}
-    {\includegraphics[width=0.9\textwidth]{img/1-2/run_success.png}}
-    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh chạy thành công tại \texttt{img/1-2/run\_success.png}}}}
+    \includegraphics[width=0.9\textwidth]{img/1-2/run_success.png}
     \caption{Kết quả chạy chương trình Task 1.2}
     \label{fig:task1_2_run_success}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \IfFileExists{img/1-2/output_preview.png}
-    {\includegraphics[width=0.9\textwidth]{img/1-2/output_preview.png}}
-    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh preview output tại \texttt{img/1-2/output\_preview.png}}}}
+    \includegraphics[width=0.9\textwidth]{img/1-2/output_preview.png}
     \caption{Một phần nội dung file \texttt{Task\_1-2.csv}}
     \label{fig:task1_2_output_preview}
 \end{figure}
 
 \begin{figure}[H]
     \centering
-    \IfFileExists{img/1-2/manual_check.png}
-    {\includegraphics[width=0.9\textwidth]{img/1-2/manual_check.png}}
-    {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh kiểm chứng thủ công tại \texttt{img/1-2/manual\_check.png}}}}
+    \includegraphics[width=0.9\textwidth]{img/1-2/manual_check.png}
     \caption{Kiểm chứng thủ công median variety cho một state-month mẫu}
     \label{fig:task1_2_manual_check}
 \end{figure}

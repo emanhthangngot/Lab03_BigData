@@ -8,9 +8,9 @@
 Nhóm đã hoàn thành cả bốn task của Lab 03, tạo ra bốn file output đúng định dạng yêu cầu:
 
 \begin{itemize}
-    \item \textbf{Task 1-1:} \texttt{Task\_1-1.csv} --- 4,057 dòng kết quả, xác định size được mua nhiều nhất theo sliding window 7 ngày cho mỗi state.
+    \item \textbf{Task 1-1:} \texttt{Task\_1-1.csv} --- 3,543 dòng kết quả, xác định size được mua nhiều nhất theo sliding window 7 ngày cho mỗi state.
     \item \textbf{Task 1-2:} \texttt{Task\_1-2.csv} --- 128 dòng kết quả, tính median variety cấp bang theo tháng cho các style có size $\geq$ XXL.
-    \item \textbf{Task 2-1:} \texttt{Task\_2-1.parquet} --- tỷ lệ đơn cancelled theo city trên tập đơn thỏa ba điều kiện đồng thời.
+    \item \textbf{Task 2-1:} \texttt{Task\_2-1.parquet} --- 2,452 dòng kết quả, tỷ lệ đơn cancelled theo city trên tập đơn thỏa ba điều kiện đồng thời.
     \item \textbf{Task 2-2:} \texttt{Task\_2-2.parquet} --- population stddev của Amount theo SKU-month với ngưỡng percentile P90/P80, hai approach approximate và exact.
 \end{itemize}
 
@@ -54,7 +54,7 @@ Phù hợp với bài toán & Sliding window, median --- cần kiểm soát chi 
 \begin{itemize}
     \item Parse ngày tháng: dataset chứa nhiều format date khác nhau, cần cascade qua nhiều pattern.
     \item Promotion-ids: chuỗi comma-separated với khoảng trắng không đều, trailing comma tạo token rỗng.
-    \item Cấu hình Spark trên WSL: version mismatch giữa Scala 2.12/2.13, network binding issues.
+    \item Cấu hình Spark trên Linux native: cần cố định đúng bản Spark/Scala/Java và đặt \texttt{SPARK\_LOCAL\_IP}, \texttt{SPARK\_LOCAL\_HOSTNAME} để đảm bảo driver bind ổn định ở local mode.
 \end{itemize}
 
 \textbf{Hướng cải thiện:}

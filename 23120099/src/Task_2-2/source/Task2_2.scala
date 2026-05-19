@@ -4,6 +4,7 @@ import org.apache.spark.sql.expressions.Window
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.Column
 import org.apache.hadoop.fs.{FileSystem, Path}
+import java.io.File
 
 /**
  * Task 2-2: Standard Deviation of Order Amount by SKU-Month
@@ -61,15 +62,17 @@ object Task2_2 {
   ): Unit = {
     val outputIsFile = outputPath.toLowerCase.endsWith(".parquet")
     if (!outputIsFile) {
-      df.coalesce(1).write.mode("overwrite").parquet(outputPath)
+      val absDir = "file://" + new File(outputPath).getAbsolutePath
+      df.coalesce(1).write.mode("overwrite").parquet(absDir)
       return
     }
 
-    val tmpDir = outputPath + "_tmp"
+    val absOutput = "file://" + new File(outputPath).getAbsolutePath
+    val tmpDir = absOutput + "_tmp"
     val conf = spark.sparkContext.hadoopConfiguration
-    val fs = FileSystem.get(conf)
+    val fs = new Path(tmpDir).getFileSystem(conf)
     val tmpPath = new Path(tmpDir)
-    val outPath = new Path(outputPath)
+    val outPath = new Path(absOutput)
 
     if (fs.exists(tmpPath)) fs.delete(tmpPath, true)
     if (fs.exists(outPath)) fs.delete(outPath, true)
@@ -129,12 +132,13 @@ object Task2_2 {
     // =========================================================================
     // STEP 1 — Load raw CSV
     // =========================================================================
+    val absInput = "file://" + new File(inputPath).getAbsolutePath
     val rawDf = spark.read
       .option("header",    "true")
       .option("inferSchema", "false")   // keep everything as String initially
       .option("quote",     "\"")
       .option("escape",    "\"")
-      .csv(inputPath)
+      .csv(absInput)
 
     // =========================================================================
     // STEP 2 — Select & clean relevant columns
@@ -314,10 +318,10 @@ object Task2_2 {
       .join(p80ExactDf,  Seq("SKU", "month"), "left")
       // Null → 0.0 for groups with 0 qualifying orders (shouldn't normally happen
       // since at least 1 order always meets promo_count >= threshold for nearest-rank)
-      .withColumn("p90_stddev_approx", round(coalesce(col("p90_stddev_approx"), lit(0.0)), 4))
-      .withColumn("p80_stddev_approx", round(coalesce(col("p80_stddev_approx"), lit(0.0)), 4))
-      .withColumn("p90_stddev_exact",  round(coalesce(col("p90_stddev_exact"),  lit(0.0)), 4))
-      .withColumn("p80_stddev_exact",  round(coalesce(col("p80_stddev_exact"),  lit(0.0)), 4))
+      .withColumn("p90_stddev_approx", coalesce(col("p90_stddev_approx"), lit(0.0)))
+      .withColumn("p80_stddev_approx", coalesce(col("p80_stddev_approx"), lit(0.0)))
+      .withColumn("p90_stddev_exact",  coalesce(col("p90_stddev_exact"),  lit(0.0)))
+      .withColumn("p80_stddev_exact",  coalesce(col("p80_stddev_exact"),  lit(0.0)))
       .select(
         col("SKU"),
         col("month"),

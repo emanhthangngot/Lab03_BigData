@@ -187,7 +187,7 @@ object Task1_1 extends Serializable {
           if (fields.length == 0) {
             Iterator.empty
           } else {
-            val state = field(fields, col.state).trim
+            val state = field(fields, col.state).trim.toUpperCase(Locale.ROOT)
             val size = field(fields, col.size).trim
             val status = field(fields, col.status).toLowerCase(Locale.ROOT)
 
@@ -200,7 +200,6 @@ object Task1_1 extends Serializable {
 
       val allEpochDays = parsedRows.map(_._1)
       val minEpochDay = allEpochDays.min()
-      val maxEpochDay = allEpochDays.max()
 
       val purchases = parsedRows.flatMap { case (epochDay, state, size, status, qtyText) =>
         parsePositiveInt(qtyText).filter(_ => status.contains("shipped")).flatMap { qty =>
@@ -211,7 +210,7 @@ object Task1_1 extends Serializable {
       val windowContributions = purchases.flatMap { purchase =>
         (1L to 7L).iterator.flatMap { offset =>
           val targetDay = purchase.orderEpochDay + offset
-          if (targetDay >= minEpochDay && targetDay <= maxEpochDay) {
+          if (targetDay >= minEpochDay) {
             Some(((purchase.state, targetDay, purchase.size), purchase.qty))
           } else {
             None

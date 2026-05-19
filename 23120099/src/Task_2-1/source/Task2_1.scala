@@ -3,6 +3,7 @@ import org.apache.spark.sql.functions._
 import org.apache.spark.sql.types._
 import org.apache.spark.sql.DataFrame
 import org.apache.hadoop.fs.{FileSystem, Path}
+import java.io.File
 
 /**
  * Task 2-1: Percentage of Cancelled Orders per City
@@ -20,7 +21,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
  * This solution uses ONLY DataFrame/Dataset API — no Spark SQL string queries.
  *
  * Output: Single Parquet file with schema:
- *   ship-city (String), ship-state (String), cancelled_percentage (Double)
+ *   ship-city (String), cancelled_percentage (Double)
  *
  * @author Trần Hữu Kim Thành (23120166)
  */
@@ -50,16 +51,19 @@ object Task2_1 {
       // 1. LOAD CSV & CAST TYPES
       // -----------------------------------------------------------------------
       // Read with header; inferSchema is disabled — we cast manually for control.
+      val absInput = "file://" + new File(inputPath).getAbsolutePath
       val rawDf = spark.read
         .option("header", "true")
         .option("inferSchema", "false")
-        .csv(inputPath)
+        .csv(absInput)
 
       // Parse the Date column (MM-dd-yy) and cast Amount to Double.
       // Keep a unique row identifier to avoid ambiguity after joins.
       val df = rawDf
         .withColumn("parsed_date", to_date(col("Date"), "MM-dd-yy"))
         .withColumn("Amount", col("Amount").cast(DoubleType))
+        .withColumn("ship_state_norm", upper(trim(col("ship-state"))))
+        .withColumn("ship_city_norm", upper(trim(col("ship-city"))))
         .withColumn("order_row_id", monotonically_increasing_id())
 
       // Cache because we reuse df in multiple branches.
@@ -101,37 +105,42 @@ object Task2_1 {
         .filter(col("active_days") >= 2)
         .select("promo_id")
 
-      // Collect the set of valid promotion IDs and broadcast it.
-      // This avoids a large shuffle join for the per-order filtering step.
-      val validPromoSet: Set[String] = promoValidity.as[String].collect().toSet
-      val broadcastValidPromos = spark.sparkContext.broadcast(validPromoSet)
+      val validPromoCount = promoValidity.count()
+      println(s"[Task 2-1] Found $validPromoCount temporally-valid promotions")
 
-      println(s"[Task 2-1] Found ${validPromoSet.size} temporally-valid promotions")
+      // Step 2c: Count valid promotions per order with DataFrame operations.
+      // This keeps the logic visible to Catalyst instead of hiding it inside a UDF.
+      val orderPromos = df
+        .filter(col("promotion-ids").isNotNull && trim(col("promotion-ids")) =!= "")
+        .select(
+          col("order_row_id"),
+          explode(
+            transform(
+              split(col("promotion-ids"), ","),
+              (promoId: org.apache.spark.sql.Column) => trim(promoId)
+            )
+          ).as("promo_id")
+        )
+        .filter(col("promo_id") =!= "")
 
-      // Step 2c: UDF to count how many valid promotions an order has.
-      val countValidPromos = udf((promoIdsRaw: String) => {
-        if (promoIdsRaw == null || promoIdsRaw.trim.isEmpty) {
-          0
-        } else {
-          val validSet = broadcastValidPromos.value
-          promoIdsRaw
-            .split(",")
-            .map(_.trim)
-            .filter(_.nonEmpty)
-            .count(id => validSet.contains(id))
-        }
-      })
+      val validPromotionCounts = orderPromos
+        .join(broadcast(promoValidity), Seq("promo_id"), "inner")
+        .groupBy("order_row_id")
+        .agg(countDistinct("promo_id").as("valid_promo_count"))
 
       // -----------------------------------------------------------------------
       // 3. APPLY CONDITION 1 & CONDITION 2
       // -----------------------------------------------------------------------
       // Condition 1: ship-service-level = "Standard"
       // Condition 2: valid_promo_count >= 3
-      val afterCond12 = df
+      val standardOrders = df
         .filter(
           lower(trim(col("ship-service-level"))) === "standard"
         )
-        .withColumn("valid_promo_count", countValidPromos(col("promotion-ids")))
+
+      val afterCond12 = standardOrders
+        .join(validPromotionCounts, Seq("order_row_id"), "left")
+        .withColumn("valid_promo_count", coalesce(col("valid_promo_count"), lit(0L)))
         .filter(col("valid_promo_count") >= 3)
 
       println(s"[Task 2-1] After Cond 1+2: ${afterCond12.count()} orders")
@@ -147,7 +156,7 @@ object Task2_1 {
           lower(trim(col("Courier Status"))) === "shipped"
         )
         .filter(col("Amount").isNotNull)
-        .groupBy("ship-state")
+        .groupBy("ship_state_norm")
         .agg(
           avg("Amount").as("merchant_shipped_avg")
         )
@@ -161,9 +170,9 @@ object Task2_1 {
       // Join orders (after Cond 1+2) with state averages.
       val joinedDf = afterCond12.join(
         stateAvgDf,
-        afterCond12("ship-state") === stateAvgDf("ship-state"),
+        Seq("ship_state_norm"),
         "inner"
-      ).drop(stateAvgDf("ship-state"))  // Remove duplicate join column
+      )
 
       // Filter: order Amount must be strictly less than the state average
       val qualifiedDf = joinedDf
@@ -178,8 +187,7 @@ object Task2_1 {
       // "Cancelled" is determined by the Status column containing "Cancelled".
       val resultDf = qualifiedDf
         .groupBy(
-          col("ship-city"),
-          col("ship-state")
+          col("ship_city_norm")
         )
         .agg(
           count("*").as("total_orders"),
@@ -191,8 +199,8 @@ object Task2_1 {
           "cancelled_percentage",
           round(col("cancelled_orders") / col("total_orders") * 100.0, 4)
         )
-        .select("ship-city", "ship-state", "cancelled_percentage")
-        .orderBy("ship-state", "ship-city")
+        .select(col("ship_city_norm").as("ship-city"), col("cancelled_percentage"))
+        .orderBy("ship-city")
 
       println("[Task 2-1] Result preview:")
       resultDf.show(20, truncate = false)
