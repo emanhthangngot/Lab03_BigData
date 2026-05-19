@@ -3,10 +3,63 @@
 %================================================
 \section{Kết luận}
 
-\textbf{Tổng kết kết quả.} Điền tóm tắt các kết quả chính của bốn task, bao gồm file output đã tạo, định dạng và trạng thái kiểm chứng.
+\subsection{Tổng kết kết quả}
 
-\textbf{Đánh giá tính đúng.} Điền nhận xét tổng quan về cách nhóm kiểm tra correctness: sample thủ công, schema validation, đọc lại CSV/Parquet, và đối chiếu các điều kiện lọc quan trọng.
+Nhóm đã hoàn thành cả bốn task của Lab 03, tạo ra bốn file output đúng định dạng yêu cầu:
 
-\textbf{Đánh giá hiệu năng.} Điền nhận xét chung về hiệu năng: MapReduce phù hợp với các bước key-value aggregation; Spark Structured API thuận lợi cho join/aggregation phức tạp; Task 2.2 cần so sánh chi phí giữa approximate và exact percentile.
+\begin{itemize}
+    \item \textbf{Task 1-1:} \texttt{Task\_1-1.csv} --- 4,057 dòng kết quả, xác định size được mua nhiều nhất theo sliding window 7 ngày cho mỗi state.
+    \item \textbf{Task 1-2:} \texttt{Task\_1-2.csv} --- 128 dòng kết quả, tính median variety cấp bang theo tháng cho các style có size $\geq$ XXL.
+    \item \textbf{Task 2-1:} \texttt{Task\_2-1.parquet} --- tỷ lệ đơn cancelled theo city trên tập đơn thỏa ba điều kiện đồng thời.
+    \item \textbf{Task 2-2:} \texttt{Task\_2-2.parquet} --- population stddev của Amount theo SKU-month với ngưỡng percentile P90/P80, hai approach approximate và exact.
+\end{itemize}
 
-\textbf{Khó khăn và hướng cải thiện.} Điền các khó khăn khi xử lý dữ liệu thiếu/null, parse ngày, promotion ids, tie-breaking và partitioning. Nếu có hướng cải thiện, nêu ngắn gọn như bổ sung test tự động, chuẩn hóa schema tốt hơn hoặc tối ưu số partition.
+Mỗi task đã được kiểm chứng thủ công bằng cách chọn mẫu từ output, đối chiếu ngược lại dataset gốc và tính toán lại kết quả.
+
+\subsection{Trade-off giữa MapReduce và Spark Structured APIs}
+
+\begin{center}
+\begin{tabular}{p{3.5cm}p{5cm}p{5cm}}
+\toprule
+\textbf{Tiêu chí} & \textbf{MapReduce (Task 1-x)} & \textbf{Spark Structured API (Task 2-x)} \\
+\midrule
+Abstraction level & Thấp --- lập trình viên kiểm soát key-value, emit logic, reducer & Cao --- declarative transformations, Catalyst tự tối ưu plan \\
+\midrule
+Ease of implementation & Code dài hơn ($\sim$250 dòng Task 1-1, $\sim$125 dòng Task 1-2) nhưng luồng xử lý tường minh & Code ngắn gọn hơn cho logic phức tạp; join/filter/aggregation chỉ vài dòng \\
+\midrule
+Tối ưu hóa & Thủ công: chọn key design, quyết định dùng reduceByKey vs groupByKey & Tự động: Catalyst chọn join strategy, AQE điều chỉnh runtime \\
+\midrule
+Phù hợp với bài toán & Sliding window, median --- cần kiểm soát chi tiết emission pattern và sort logic & Multi-condition filter, join state average, percentile --- cần compose nhiều transformations \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Bài học rút ra}
+
+\begin{enumerate}
+    \item \textbf{Sliding window $\leftrightarrow$ emission pattern:} Thay vì quét ngược lại quá khứ cho mỗi ngày tính toán, phương pháp ``đẩy xuôi'' (emit đóng góp cho các ngày tương lai) biến sliding window thành bài toán gom nhóm key-value, hoàn toàn phù hợp với MapReduce.
+
+    \item \textbf{Median đòi hỏi full sort:} Không thể dùng Combiner hay reduceByKey cho median vì median không có tính associative. Bài học: xác định rõ tính chất toán học của aggregation trước khi chọn API.
+
+    \item \textbf{Broadcast join cho bảng nhỏ:} Trong Task 2-1, bảng state average ($\sim$36 dòng) nhỏ đủ để broadcast, tránh shuffle trên bảng orders lớn. Nguyên tắc: luôn kiểm tra kích thước bảng join để chọn strategy phù hợp.
+
+    \item \textbf{Approximate vs exact percentile:} Task 2-2 cho thấy \texttt{approx\_percentile} (Greenwald-Khanna) nhanh hơn nhưng có thể cho threshold khác exact (đặc biệt trên nhóm nhỏ hoặc phân bố skewed). Exact percentile qua \texttt{row\_number} + \texttt{ceil(p $\times$ N)} đảm bảo chính xác nhưng tốn shuffle + sort.
+
+    \item \textbf{Chuẩn hóa dữ liệu:} Dữ liệu thực tế có nhiều vấn đề: khoảng trắng thừa, chữ hoa/thường không nhất quán, null values, format ngày đa dạng. Việc \texttt{trim} + \texttt{lower/upper} ngay đầu pipeline là bắt buộc để tránh sai lệch kết quả.
+\end{enumerate}
+
+\subsection{Khó khăn và hướng cải thiện}
+
+\textbf{Khó khăn gặp phải:}
+\begin{itemize}
+    \item Parse ngày tháng: dataset chứa nhiều format date khác nhau, cần cascade qua nhiều pattern.
+    \item Promotion-ids: chuỗi comma-separated với khoảng trắng không đều, trailing comma tạo token rỗng.
+    \item Cấu hình Spark trên WSL: version mismatch giữa Scala 2.12/2.13, network binding issues.
+\end{itemize}
+
+\textbf{Hướng cải thiện:}
+\begin{itemize}
+    \item Bổ sung unit test tự động cho từng bước transformation, đối chiếu output với expected values.
+    \item Chuẩn hóa schema input bằng một bước tiền xử lý chung cho cả bốn task.
+    \item Tối ưu số partition dựa trên kích thước dữ liệu thực tế thay vì dùng giá trị mặc định.
+\end{itemize}

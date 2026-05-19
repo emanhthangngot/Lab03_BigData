@@ -142,6 +142,84 @@ def computeMedian(sortedValues: List[Int]):
 
 \textbf{Xử lý dữ liệu lỗi.} Các dòng có giá trị null ở bất kỳ cột nào trong 5 cột cần thiết đều bị loại bằng \texttt{.na.drop()} ngay từ đầu pipeline. Hàm \texttt{parseMonth} trả về \texttt{None} khi chuỗi ngày không đúng định dạng \texttt{MM-dd-yy}, và \texttt{flatMap} tự động bỏ qua các \texttt{None} này. Cột \texttt{ship-state} và \texttt{Size} được \texttt{trim} và chuyển \texttt{toUpperCase} để chuẩn hóa, tránh trường hợp cùng một bang nhưng bị viết khác kiểu chữ (ví dụ ``Bihar'' và ``BIHAR'') dẫn đến trùng lặp key.
 
+\subsection{Phân tích chuyên sâu}
+
+\subsubsection{Pseudocode tổng quan}
+
+\begin{algorithm}[H]
+\caption{State-level Median Variety per Month (Two-pass MapReduce)}
+\label{alg:task1_2}
+\begin{algorithmic}[1]
+\Require Dataset $\mathcal{D}$ with columns (Date, SKU, Style, Size, ship-state)
+\Ensure CSV file: (State, Month, MedianVariety)
+\Statex
+\Statex \textbf{--- MAP ---}
+\ForAll{row $r \in \mathcal{D}$ where all 5 columns $\neq$ null}
+    \State month $\gets$ parseMonth(r.Date) \Comment{``YYYY-MM''}
+    \State \textbf{emit} $\langle$(r.State, month, r.Style), (r.SKU, isXXL(r.Size))$\rangle$
+\EndFor
+\Statex
+\Statex \textbf{--- REDUCE 1: variety per style ---}
+\ForAll{key (State, Month, Style)}
+    \State skuSet $\gets$ collect distinct SKU from values
+    \State hasXXL $\gets \bigvee$ isXXL flags from values
+    \State variety $\gets$ $|$skuSet$|$
+    \If{hasXXL}
+        \State \textbf{emit} $\langle$(State, Month), variety$\rangle$
+    \EndIf
+\EndFor
+\Statex
+\Statex \textbf{--- REDUCE 2: median ---}
+\ForAll{key (State, Month)}
+    \State $V \gets$ sort(all variety values)
+    \State $n \gets |V|$
+    \If{$n$ is odd}
+        \State median $\gets V[\lfloor n/2 \rfloor]$
+    \Else
+        \State median $\gets (V[n/2 - 1] + V[n/2]) \;/\; 2$
+    \EndIf
+    \State \textbf{emit} (State, Month, median)
+\EndFor
+\end{algorithmic}
+\end{algorithm}
+
+Công thức tính median cho danh sách đã sắp xếp $V = [v_1, v_2, \ldots, v_n]$:
+\[
+\text{median}(V) = \begin{cases}
+v_{\lceil n/2 \rceil} & \text{nếu } n \text{ lẻ} \\[4pt]
+\dfrac{v_{n/2} + v_{n/2+1}}{2} & \text{nếu } n \text{ chẵn}
+\end{cases}
+\]
+
+\subsubsection{Tại sao median KHÔNG thể tính bằng Combiner đơn giản}
+
+Trong MapReduce, Combiner cho phép giảm dữ liệu trước shuffle bằng cách thực hiện reduce cục bộ tại mỗi mapper. Tuy nhiên, Combiner chỉ hoạt động với các phép toán \textit{associative} và \textit{commutative} như sum, min, max. Median \textbf{không} thỏa tính chất này: trung vị của hai tập con không bằng trung vị của tập gộp.
+
+\textbf{Ví dụ:} Partition A có variety $[1, 3, 5]$, median = 3. Partition B có variety $[2, 4]$, median = 3. Nhưng tập gộp $[1, 2, 3, 4, 5]$ có median = 3 --- trùng trong ví dụ này nhưng không đảm bảo trong trường hợp tổng quát (ví dụ A = $[1, 10]$, B = $[2, 3]$: median A = 5.5, median B = 2.5, nhưng median gộp = 2.5).
+
+Do đó, bước Reduce 2 phải dùng \texttt{groupByKey} (không phải \texttt{reduceByKey}) để gom toàn bộ danh sách variety về cùng reducer, sort rồi trích vị trí giữa. Đây là chi phí bắt buộc: shuffle toàn bộ variety values.
+
+\subsubsection{Chiến lược tính median trong MapReduce context}
+
+Lời giải áp dụng chiến lược \textbf{two-pass aggregation}:
+
+\begin{enumerate}
+    \item \textbf{Pass 1} (\texttt{aggregateByKey}): Gom theo \texttt{(state, month, style)} để tính variety = $|$distinct SKU$|$ và cờ hasXXL. \texttt{aggregateByKey} cho phép dùng accumulator \texttt{mutable.Set} --- hiệu quả hơn \texttt{groupByKey} vì chỉ cần duy trì set thay vì gom toàn bộ list.
+    \item \textbf{Pass 2} (\texttt{groupByKey}): Gom theo \texttt{(state, month)} để thu tất cả variety, sort rồi tính median. Ở pass này, \texttt{groupByKey} là bắt buộc vì median cần toàn bộ danh sách đã sort.
+\end{enumerate}
+
+Lý do không dùng \texttt{TreeMap/SortedMap} trong reducer: trong Spark RDD context, \texttt{aggregateByKey} với SortedMap vẫn phải merge các map từ các partition --- chi phí merge $O(k \log k)$ tương đương sort sau groupByKey, nhưng phức tạp hóa code và tăng bộ nhớ do phải duy trì cấu trúc cây trong accumulator.
+
+\subsubsection{Cách xác định ``size $\geq$ XXL'' --- parsing logic}
+
+Hàm \texttt{isAtLeastXXL} kiểm tra size theo hai bước:
+\begin{enumerate}
+    \item \textbf{Exact match}: So khớp trực tiếp với tập \texttt{\{XXL, 2XL, XXXL, 3XL, 4XL, 5XL, 6XL\}} sau khi \texttt{trim.toUpperCase}.
+    \item \textbf{Regex fallback}: Pattern \verb|([2-9]|\d{2,})XL| bắt các size dạng $n$XL với $n \geq 2$ hoặc $n$ có từ 2 chữ số trở lên (ví dụ 10XL, 12XL).
+\end{enumerate}
+
+Thứ tự quan trọng: kiểm tra Set trước (O(1) lookup) vì đa số cases rơi vào đây; regex chỉ là fallback cho các size hiếm gặp. Lưu ý \texttt{XL} (chỉ 1 chữ X) và \texttt{1XL} đều \textbf{không} qualify vì không khớp Set và regex yêu cầu $n \geq 2$.
+
 \subsection{Kết quả thực thi \& Xuất dữ liệu}
 File output đã được tạo tại \texttt{data/output/Task\_1-2.csv}. Thông tin chi tiết:
 
