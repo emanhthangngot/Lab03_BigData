@@ -3,124 +3,291 @@
 %================================================
 \section{Task 2.1: Percentage of Cancelled Orders per City}
 
-\subsection*{Hướng dẫn điền nhanh cho người phụ trách}
-Task 2.1 có nhiều yêu cầu bắt buộc hơn hai task MapReduce. Người phụ trách cần điền đủ phần logic, code DataFrame/Dataset API, output, và đặc biệt là phân tích execution plan.
-
-\begin{itemize}
-    \item File nguồn cần tham chiếu: \texttt{src/Task\_2-1/src/main/scala/Task2\_1.scala}.
-    \item Không mô tả lời giải bằng Spark SQL string query; nhấn mạnh code dùng DataFrame/Dataset API.
-    \item Bắt buộc dán \texttt{explain(true)} đầy đủ hoặc phần plan đủ để thấy parsed/analyzed/optimized/physical plan.
-    \item Bắt buộc đếm join strategy, số node \texttt{Exchange}, và số stages từ Spark UI/log.
-    \item Thêm ảnh vào thư mục \texttt{img/2-1} theo các tên gợi ý cuối section.
-\end{itemize}
-
 \subsection{Phân tích truy vấn (Query Analysis)}
-\textbf{Mục tiêu cần viết.} Trình bày rằng bài toán tính phần trăm đơn cancelled theo city trong tập order thỏa đồng thời ba điều kiện: service level Standard, có ít nhất 3 promotion hợp lệ theo thời gian, và Amount nhỏ hơn average Amount của merchant-fulfillment shipped orders trong cùng state.
 
-\textbf{Điều kiện 1 cần viết.} Nêu cách chuẩn hóa và lọc \texttt{ship-service-level = Standard}. Nếu code dùng dạng \texttt{lower(trim(column))}, ghi rõ để tránh sai do khoảng trắng/chữ hoa.
+Bài toán yêu cầu tính \textbf{phần trăm đơn hàng bị huỷ} (cancelled) theo từng thành phố (\texttt{ship-city}), trong đó chỉ xét các đơn hàng thỏa \textbf{đồng thời ba điều kiện}:
 
-\textbf{Điều kiện 2 cần viết.} Mô tả chi tiết temporally-valid promotion:
+\textbf{Điều kiện 1 --- Service level.}
+Đơn hàng phải có \texttt{ship-service-level} bằng \texttt{"Standard"}. Trong code, phép so sánh được chuẩn hóa bằng \texttt{lower(trim(col("ship-service-level"))) === "standard"} để tránh sai lệch do khoảng trắng thừa hoặc khác biệt chữ hoa/chữ thường.
+
+\textbf{Điều kiện 2 --- Ít nhất 3 temporally-valid promotions.}
+Mỗi đơn hàng chứa cột \texttt{promotion-ids}, là chuỗi các mã khuyến mãi phân tách bằng dấu phẩy. Một promotion được gọi là \textit{temporally valid} (hợp lệ về mặt thời gian) nếu khoảng thời gian hoạt động của nó trên \textbf{toàn bộ dataset} kéo dài ít nhất 2 ngày. Cụ thể, với mỗi promotion id duy nhất xuất hiện trong dataset:
 \begin{itemize}
-    \item Tách \texttt{promotion-ids} theo dấu phẩy.
-    \item Trim từng promotion id, bỏ token rỗng.
-    \item Tính \texttt{first\_date} và \texttt{last\_date} của từng promotion id trên toàn dataset.
-    \item \texttt{active\_days = datediff(last\_date, first\_date)}.
-    \item Promotion hợp lệ nếu \texttt{active\_days >= 2}.
-    \item Order qualify điều kiện này nếu có ít nhất 3 promotion hợp lệ.
+    \item Xác định ngày xuất hiện \textbf{đầu tiên} ($d_{\min}$) và ngày xuất hiện \textbf{cuối cùng} ($d_{\max}$).
+    \item Tính khoảng hoạt động: $\text{active\_days} = d_{\max} - d_{\min}$ (tính bằng số ngày).
+    \item Promotion hợp lệ khi $\text{active\_days} \geq 2$.
 \end{itemize}
+Một đơn hàng thỏa điều kiện này nếu trong danh sách \texttt{promotion-ids} của nó có \textbf{ít nhất 3} promotion hợp lệ, kể cả các promotion do Amazon phát hành.
 
-\textbf{Điều kiện 3 cần viết.} Mô tả cách tính average Amount theo \texttt{ship-state} trên các dòng có \texttt{Fulfilment = Merchant} và \texttt{Courier Status = Shipped}. Sau đó order đang xét chỉ được giữ nếu \texttt{Amount < merchant\_shipped\_avg} của cùng state.
-
-\textbf{Tỷ lệ cancelled cần viết.} Ghi công thức:
+\textbf{Điều kiện 3 --- Amount thấp hơn trung bình bang.}
+Tính giá trị trung bình \texttt{Amount} theo từng \texttt{ship-state} trên tập con các đơn hàng có \texttt{Fulfilment = "Merchant"} và \texttt{Courier Status = "Shipped"}. Đơn hàng đang xét chỉ được giữ nếu:
 \[
-\texttt{cancelled\_percentage} =
-\frac{\texttt{cancelled\_orders}}{\texttt{total\_qualified\_orders}} \times 100
+\texttt{Amount}_{\text{order}} < \overline{\texttt{Amount}}_{\text{Merchant,Shipped}}^{\text{(same state)}}
 \]
-Nêu rõ code xác định cancelled như thế nào, ví dụ \texttt{Status} bằng hoặc chứa \texttt{cancelled} sau khi chuẩn hóa.
 
-\textbf{Schema cần điền.} Điền schema Parquet thực tế. Theo code hiện tại:
-\begin{itemize}
-    \item \texttt{ship-city}: city.
-    \item \texttt{ship-state}: state, giữ lại để tránh nhập nhằng city trùng tên giữa các state.
-    \item \texttt{cancelled\_percentage}: tỷ lệ phần trăm đã làm tròn.
-\end{itemize}
+\textbf{Tính phần trăm cancelled.}
+Sau khi lọc ra tất cả đơn hàng thỏa đồng thời ba điều kiện, nhóm theo \texttt{ship-city} và \texttt{ship-state}:
+\[
+\texttt{cancelled\_percentage} = \frac{|\{o : \texttt{Status}(o) = \text{``Cancelled''}\}|}{|\text{tổng đơn qualified}|} \times 100
+\]
+Code xác định trạng thái cancelled bằng \texttt{lower(trim(col("Status"))) === "cancelled"}, tức so khớp chính xác sau chuẩn hóa.
 
-\subsection{Phân rã thành các bước cơ bản (Decomposition)}
-Mỗi bước dưới đây cần viết 2--5 câu, kèm tên DataFrame trong code nếu có.
-
-\begin{enumerate}
-    \item \textbf{Load CSV và cast type.} Ghi cách đọc CSV header, parse \texttt{Date} thành \texttt{parsed\_date}, cast \texttt{Amount} sang Double, và tạo id dòng nếu code dùng để tránh nhầm sau join.
-    \item \textbf{Explode promotion ids.} Ghi DataFrame chứa \texttt{parsed\_date} và từng \texttt{promo\_id}; giải thích vì sao cần explode để tính active period toàn cục.
-    \item \textbf{Tính valid promotions.} Ghi groupBy \texttt{promo\_id}, lấy min/max date, datediff, lọc \texttt{active\_days >= 2}.
-    \item \textbf{Đếm valid promotions per order.} Ghi code dùng UDF/broadcast set hoặc join để đếm. Nếu dùng broadcast set như code hiện tại, giải thích vì bảng valid promotions đủ nhỏ để broadcast.
-    \item \textbf{Lọc Standard và valid promotion count.} Ghi DataFrame sau điều kiện 1 và 2, kèm số dòng nếu có log.
-    \item \textbf{Tính average Amount theo state.} Ghi filter Merchant + Shipped, groupBy state, avg Amount.
-    \item \textbf{Join và lọc Amount thấp hơn average.} Ghi join giữa orders đã qua điều kiện 1--2 với state average, rồi filter \texttt{Amount < merchant\_shipped\_avg}.
-    \item \textbf{Group theo city-state để tính percentage.} Ghi count tổng, count cancelled, công thức percentage.
-    \item \textbf{Ghi single Parquet.} Ghi cách coalesce/write temp directory/rename part file nếu code làm như vậy.
-\end{enumerate}
-
-\subsection{Lý do phân rã}
-Viết một đoạn giải thích vì sao temporally-valid promotion phải được tính toàn dataset trước khi xét từng order. Đây là thuộc tính của promotion id, không phải thuộc tính cục bộ của một order.
-
-Viết một đoạn giải thích vì sao average Amount phải được tính theo state riêng rồi join lại. Điều kiện thứ ba phụ thuộc vào state của order hiện tại, nên mỗi order cần được so sánh với ngưỡng average tương ứng.
-
-Viết một đoạn giải thích vì sao cách này phù hợp với Spark Structured API: các phép split/explode, groupBy, join, filter, aggregation đều là DataFrame transformations nên Catalyst có thể tối ưu physical plan.
-
-\subsection{Chiến lược thực thi \& Triển khai mã nguồn}
-\textbf{Điền lệnh chạy.}
-\begin{lstlisting}[language=bash]
-TODO: Điền lệnh chạy Task 2.1 thực tế.
-\end{lstlisting}
-
-\textbf{Điền snippet promotion validity.} Chèn đoạn code explode \texttt{promotion-ids}, groupBy \texttt{promo\_id}, tính min/max date và lọc active period.
-
-\textbf{Điền snippet count valid promotions.} Chèn đoạn code UDF/broadcast set hoặc join-based count, tùy đúng với code.
-
-\textbf{Điền snippet state average.} Chèn đoạn code filter \texttt{Fulfilment}/\texttt{Courier Status} và groupBy \texttt{ship-state}.
-
-\textbf{Điền snippet result.} Chèn đoạn code groupBy \texttt{ship-city}, \texttt{ship-state}, count total/cancelled và tính \texttt{cancelled\_percentage}.
-
-\subsection{Phân tích Kế hoạch Thực thi (Execution Plan Analysis)}
-\textbf{Bước 1 -- Dán execution plan.} Chạy chương trình và copy phần \texttt{explain(true)} vào block dưới đây.
-
-\begin{lstlisting}[language={}]
-TODO: Dán output explain(true) của Task 2.1 vào block này.
-\end{lstlisting}
-
-\textbf{Bước 2 -- Liệt kê join strategy.} Điền bảng sau từ physical plan:
+\textbf{Schema output Parquet:}
 \begin{center}
 \begin{tabular}{lll}
 \toprule
-\textbf{Join / operation} & \textbf{Physical strategy} & \textbf{Giải thích} \\
+\textbf{Cột} & \textbf{Kiểu} & \textbf{Ý nghĩa} \\
 \midrule
-TODO & TODO & TODO \\
+\texttt{ship-city}  & String & Thành phố giao hàng \\
+\texttt{ship-state} & String & Bang, giữ lại để phân biệt city trùng tên giữa các state \\
+\texttt{cancelled\_percentage} & Double & Tỷ lệ huỷ (\%), làm tròn 4 chữ số thập phân \\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\textbf{Bước 3 -- Đếm Exchange nodes.} Tìm tất cả dòng chứa \texttt{Exchange} trong physical plan. Điền số lượng và giải thích mỗi Exchange phục vụ groupBy, join, sort/orderBy hay coalesce/write.
+% ------------------------------------------------------------------
+\subsection{Phân rã thành các bước cơ bản (Decomposition)}
 
-\textbf{Bước 4 -- Đếm stages.} Lấy số stages từ Spark UI hoặc log chạy. Điền tổng số stages và mô tả ngắn stage nào tương ứng với đọc input, aggregation promotion, aggregation state average, join/filter, aggregation result và ghi output.
+Lời giải được phân rã thành 9 bước tuần tự, mỗi bước tương ứng một DataFrame transformation rõ ràng:
 
-\subsection{Kết quả thực thi \& Xuất dữ liệu}
-\textbf{Điền thông tin output.}
-\begin{itemize}
-    \item Đường dẫn output: \texttt{data/output/Task\_2-1.parquet}.
-    \item Số dòng kết quả: TODO.
-    \item Kích thước file: TODO.
-    \item Schema đọc lại bằng Spark/Pandas: TODO.
-\end{itemize}
+\begin{enumerate}
+    \item \textbf{Đọc CSV và cast kiểu dữ liệu} (\texttt{df}).
+    Đọc file CSV với header, tắt \texttt{inferSchema} để kiểm soát kiểu thủ công. Parse cột \texttt{Date} sang kiểu date bằng format \texttt{MM-dd-yy}, cast \texttt{Amount} sang \texttt{DoubleType}, và tạo cột \texttt{order\_row\_id} bằng \texttt{monotonically\_increasing\_id()} để định danh duy nhất từng dòng sau các phép join. DataFrame này được \texttt{cache()} vì sử dụng lại ở nhiều nhánh.
 
-\textbf{Điền sample output.}
-\begin{lstlisting}[language={}]
-TODO: Dán 5-10 dòng sample từ Parquet.
+    \item \textbf{Explode promotion-ids thành từng dòng riêng} (\texttt{promoExploded}).
+    Lọc bỏ các dòng có \texttt{promotion-ids} null hoặc rỗng. Dùng \texttt{split} tách chuỗi theo dấu phẩy, \texttt{transform} + \texttt{trim} để loại khoảng trắng thừa, rồi \texttt{explode} thành từng promotion id riêng lẻ. Bước này cần thiết vì active period là thuộc tính \textit{toàn cục} của promotion id — phải gom tất cả ngày xuất hiện trên toàn dataset.
+
+    \item \textbf{Tính promotion validity} (\texttt{promoValidity}).
+    GroupBy \texttt{promo\_id}, tính \texttt{min(parsed\_date)} và \texttt{max(parsed\_date)}, sau đó \texttt{datediff} để ra \texttt{active\_days}. Lọc giữ lại các promotion có $\text{active\_days} \geq 2$.
+
+    \item \textbf{Broadcast valid promotion set và tạo UDF đếm}.
+    Collect tập promotion hợp lệ về driver thành \texttt{Set[String]}, broadcast ra tất cả executor. Tạo UDF \texttt{countValidPromos} nhận chuỗi \texttt{promotion-ids}, split theo dấu phẩy, trim, và đếm bao nhiêu id thuộc broadcast set. Lý do dùng broadcast set thay vì join: tập valid promotions nhỏ (vài trăm đến vài nghìn id), nên broadcast tránh được shuffle join tốn kém trên bảng orders lớn.
+
+    \item \textbf{Áp dụng Điều kiện 1 và 2} (\texttt{afterCond12}).
+    Filter \texttt{ship-service-level = "Standard"}, sau đó gọi UDF để tính \texttt{valid\_promo\_count} cho mỗi order, rồi filter $\geq 3$. Thứ tự filter Standard trước giúp giảm số dòng cần chạy UDF.
+
+    \item \textbf{Tính trung bình Amount theo state} (\texttt{stateAvgDf}).
+    Từ \texttt{df} gốc (không phải \texttt{afterCond12}), lọc \texttt{Fulfilment = "Merchant"} và \texttt{Courier Status = "Shipped"}, loại Amount null, rồi \texttt{groupBy("ship-state").agg(avg("Amount"))}. Kết quả là bảng nhỏ ($\sim$36 bang) chứa ngưỡng trung bình cho mỗi state.
+
+    \item \textbf{Join và áp dụng Điều kiện 3} (\texttt{qualifiedDf}).
+    Inner join \texttt{afterCond12} với \texttt{stateAvgDf} trên cột \texttt{ship-state}, rồi filter \texttt{Amount < merchant\_shipped\_avg}. Sau bước này, chỉ còn lại các đơn thỏa đồng thời cả ba điều kiện.
+
+    \item \textbf{Tính cancelled percentage theo city} (\texttt{resultDf}).
+    GroupBy \texttt{(ship-city, ship-state)}, đếm tổng đơn và đếm đơn cancelled bằng \texttt{sum(when(... === "cancelled", 1).otherwise(0))}. Tính tỷ lệ phần trăm và làm tròn 4 chữ số.
+
+    \item \textbf{Xuất single Parquet file}.
+    \texttt{coalesce(1)} để gộp về 1 partition, ghi vào thư mục tạm, rồi rename part file thành file Parquet đơn lẻ tại đường dẫn output. Xóa checksum sidecar file.
+\end{enumerate}
+
+% ------------------------------------------------------------------
+\subsection{Lý do phân rã}
+
+\textbf{Temporally-valid promotion phải tính toàn cục trước.}
+Active period của một promotion id được xác định bởi khoảng cách giữa ngày xuất hiện đầu tiên và cuối cùng \textit{trên toàn bộ dataset}, không phải chỉ trong một order riêng lẻ. Do đó, bước explode--groupBy--datediff phải xử lý toàn bộ dữ liệu trước khi kết quả có thể áp dụng ngược lại từng order. Đây là lý do pipeline chia thành hai nhánh song song: nhánh tính validity và nhánh xử lý order chính.
+
+\textbf{Average Amount theo state phải tính riêng rồi join.}
+Điều kiện thứ ba yêu cầu so sánh Amount của mỗi order với trung bình Amount cùng state nhưng chỉ trên tập con Merchant+Shipped. Vì tập con này khác với tập order đang xét (Standard service level), ta không thể dùng window function trực tiếp mà phải tính aggregate riêng rồi join theo \texttt{ship-state}. Bảng \texttt{stateAvgDf} chỉ có $\sim$36 dòng (mỗi bang một dòng), nên Spark có thể chọn BroadcastHashJoin, tránh shuffle.
+
+\textbf{Thứ tự áp dụng điều kiện tối ưu shuffle cost.}
+Code áp dụng Điều kiện 1 (filter Standard) trước Điều kiện 2 (đếm valid promotions) vì filter đơn giản giảm số dòng trước khi chạy UDF tốn kém. Điều kiện 3 được áp dụng sau cùng vì cần kết quả join với \texttt{stateAvgDf}. Nếu đảo thứ tự --- join trước rồi filter --- khối lượng dữ liệu tham gia join sẽ lớn hơn đáng kể.
+
+% ------------------------------------------------------------------
+\subsection{Chiến lược thực thi \& Triển khai mã nguồn}
+
+Task 2.1 được cài đặt trong file \texttt{src/Task\_2-1/source/Task2\_1.scala}, sử dụng \textbf{hoàn toàn DataFrame/Dataset API} --- không dùng Spark SQL string query. Chương trình nhận hai tham số: đường dẫn CSV đầu vào và đường dẫn file Parquet đầu ra.
+
+\textbf{Lệnh chạy mẫu:}
+\begin{lstlisting}[language=bash]
+cat > /tmp/task2_1.runner.scala <<'EOF'
+:load src/Task_2-1/source/Task2_1.scala
+Task2_1.main(Array("data/input/Amazon Sale Report.csv",
+  "data/output/Task_2-1.parquet"))
+sys.exit(0)
+EOF
+spark-shell < /tmp/task2_1.runner.scala
 \end{lstlisting}
 
-\textbf{Điền kiểm chứng thủ công.} Chọn một city-state trong output. Ghi tổng order qualified, số cancelled, phép tính percentage và đối chiếu với \texttt{cancelled\_percentage}.
+\textbf{Explode và tính promotion validity.}
+\begin{lstlisting}[language=Scala]
+val promoExploded = df
+  .filter(col("promotion-ids").isNotNull
+       && col("promotion-ids") =!= "")
+  .select(col("parsed_date"),
+    explode(transform(
+      split(col("promotion-ids"), ","),
+      (promoId: Column) => trim(promoId)
+    )).as("promo_id"))
+  .filter(col("promo_id") =!= "")
 
+val promoValidity = promoExploded
+  .groupBy("promo_id")
+  .agg(min("parsed_date").as("first_date"),
+       max("parsed_date").as("last_date"))
+  .withColumn("active_days",
+    datediff(col("last_date"), col("first_date")))
+  .filter(col("active_days") >= 2)
+  .select("promo_id")
+\end{lstlisting}
+
+Lý do dùng \texttt{transform} + \texttt{trim} trước \texttt{explode} thay vì trim sau: đảm bảo mỗi token đã sạch trước khi tạo dòng mới, tránh tạo dòng thừa với promotion id rỗng do trailing comma.
+
+\textbf{Broadcast set và UDF đếm valid promotions.}
+\begin{lstlisting}[language=Scala]
+val validPromoSet: Set[String] =
+  promoValidity.as[String].collect().toSet
+val broadcastValidPromos =
+  spark.sparkContext.broadcast(validPromoSet)
+
+val countValidPromos = udf((raw: String) => {
+  if (raw == null || raw.trim.isEmpty) 0
+  else {
+    val validSet = broadcastValidPromos.value
+    raw.split(",").map(_.trim).filter(_.nonEmpty)
+       .count(id => validSet.contains(id))
+  }
+})
+\end{lstlisting}
+
+Chiến lược broadcast set được chọn thay vì join vì: (1) tập valid promotion ids nhỏ, fit trong bộ nhớ driver và executor; (2) join giữa bảng orders ($\sim$128K dòng) với bảng promotions (hàng nghìn id) sau explode sẽ tạo shuffle lớn; (3) UDF trên broadcast set chạy local tại mỗi partition, không cần network I/O.
+
+\textbf{Filter service level và đếm promotions.}
+\begin{lstlisting}[language=Scala]
+val afterCond12 = df
+  .filter(lower(trim(
+    col("ship-service-level"))) === "standard")
+  .withColumn("valid_promo_count",
+    countValidPromos(col("promotion-ids")))
+  .filter(col("valid_promo_count") >= 3)
+\end{lstlisting}
+
+\textbf{Tính trung bình Amount theo state.}
+\begin{lstlisting}[language=Scala]
+val stateAvgDf = df
+  .filter(
+    lower(trim(col("Fulfilment"))) === "merchant" &&
+    lower(trim(col("Courier Status"))) === "shipped")
+  .filter(col("Amount").isNotNull)
+  .groupBy("ship-state")
+  .agg(avg("Amount").as("merchant_shipped_avg"))
+\end{lstlisting}
+
+\textbf{Join điều kiện 3 và tính cancelled percentage.}
+\begin{lstlisting}[language=Scala]
+val joinedDf = afterCond12.join(stateAvgDf,
+  afterCond12("ship-state") === stateAvgDf("ship-state"),
+  "inner"
+).drop(stateAvgDf("ship-state"))
+
+val qualifiedDf = joinedDf
+  .filter(col("Amount").isNotNull)
+  .filter(col("Amount") < col("merchant_shipped_avg"))
+
+val resultDf = qualifiedDf
+  .groupBy(col("ship-city"), col("ship-state"))
+  .agg(
+    count("*").as("total_orders"),
+    sum(when(lower(trim(col("Status"))) === "cancelled",
+             1).otherwise(0)).as("cancelled_orders"))
+  .withColumn("cancelled_percentage",
+    round(col("cancelled_orders") /
+          col("total_orders") * 100.0, 4))
+  .select("ship-city","ship-state","cancelled_percentage")
+  .orderBy("ship-state", "ship-city")
+\end{lstlisting}
+
+Lý do giữ cả \texttt{ship-state} trong output: nhiều thành phố có thể trùng tên giữa các bang khác nhau (ví dụ ``Hyderabad'' ở cả Telangana và Andhra Pradesh). GroupBy theo cả hai cột tránh gộp nhầm dữ liệu.
+
+% ------------------------------------------------------------------
+\subsection{Phân tích chuyên sâu --- Kế hoạch thực thi (Execution Plan Analysis)}
+
+\subsubsection{Output của explain(true)}
+Dưới đây là kế hoạch thực thi mở rộng (extended execution plan) thu được từ lệnh \texttt{resultDf.explain(true)} khi chạy chương trình:
+
+\begin{lstlisting}[language={},basicstyle=\ttfamily\tiny]
+% [PASTE explain(true) OUTPUT HERE]
+\end{lstlisting}
+
+\subsubsection{Phân tích Physical Join Strategy}
+
+Pipeline chứa một phép join chính: \texttt{afterCond12} $\bowtie_{\texttt{ship-state}}$ \texttt{stateAvgDf}.
+
+\begin{center}
+\begin{tabular}{p{4cm}lp{6cm}}
+\toprule
+\textbf{Join} & \textbf{Strategy dự kiến} & \textbf{Giải thích} \\
+\midrule
+\texttt{afterCond12} $\bowtie$ \texttt{stateAvgDf} & BroadcastHashJoin & \texttt{stateAvgDf} chỉ có $\sim$36 dòng (mỗi bang một dòng), nhỏ hơn nhiều so với broadcast threshold mặc định 10 MB của Spark. Catalyst tự động chọn broadcast bảng nhỏ hơn. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Build side} trong BroadcastHashJoin là \texttt{stateAvgDf} vì kích thước cực nhỏ. Spark sẽ serialize bảng này, broadcast đến mỗi executor, rồi thực hiện hash lookup cục bộ cho từng partition của \texttt{afterCond12}. Nhờ vậy, phép join không phát sinh shuffle trên bảng orders lớn.
+
+Nếu \texttt{stateAvgDf} vượt 10 MB (cấu hình \texttt{spark.sql.autoBroadcastJoinThreshold}), Spark sẽ chuyển sang SortMergeJoin --- yêu cầu shuffle cả hai bảng theo join key --- tốn kém hơn đáng kể. Trong trường hợp này, với chỉ $\sim$36 dòng, BroadcastHashJoin là lựa chọn tối ưu.
+
+\subsubsection{Đếm Exchange Nodes (Shuffle)}
+
+Dựa trên pipeline DataFrame, các Exchange (shuffle) dự kiến gồm:
+
+\begin{center}
+\begin{tabular}{clp{6.5cm}}
+\toprule
+\textbf{\#} & \textbf{Exchange} & \textbf{Mục đích} \\
+\midrule
+1 & \texttt{groupBy("promo\_id")} & Shuffle để gom tất cả ngày xuất hiện của mỗi promotion id khi tính min/max date. \\
+2 & \texttt{groupBy("ship-state")} trên Merchant+Shipped & Shuffle để tính trung bình Amount theo state. \\
+3 & \texttt{groupBy("ship-city", "ship-state")} & Shuffle để gom đơn hàng qualified theo city-state cho phép tính percentage. \\
+4 & \texttt{orderBy("ship-state", "ship-city")} & Exchange cho phép sort toàn cục kết quả cuối. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\textbf{Lưu ý:} Phép join \texttt{afterCond12} $\bowtie$ \texttt{stateAvgDf} \textit{không} tạo Exchange riêng cho bảng orders nếu Spark chọn BroadcastHashJoin --- chỉ broadcast bảng nhỏ, bảng lớn giữ nguyên partition.
+
+\subsubsection{Đếm Stages}
+
+Mỗi Exchange node tạo một ranh giới stage mới. Với 4 Exchange dự kiến, pipeline sẽ có khoảng \textbf{5--6 stages} (tùy thuộc vào AQE có gộp stages hay không):
+
+\begin{enumerate}
+    \item \textbf{Stage 1:} Đọc CSV, parse date/amount, scan toàn bộ input.
+    \item \textbf{Stage 2:} Explode promotion-ids, shuffle theo \texttt{promo\_id}, tính min/max date.
+    \item \textbf{Stage 3:} Filter Merchant+Shipped, shuffle theo \texttt{ship-state}, tính avg Amount.
+    \item \textbf{Stage 4:} Filter Standard, chạy UDF đếm valid promos, BroadcastHashJoin với stateAvgDf, filter Amount.
+    \item \textbf{Stage 5:} Shuffle theo \texttt{(ship-city, ship-state)}, tính count/cancelled.
+    \item \textbf{Stage 6:} Sort toàn cục, coalesce và ghi Parquet.
+\end{enumerate}
+
+\subsubsection{Thảo luận Adaptive Query Execution (AQE)}
+
+Code không bật AQE một cách tường minh (không có \texttt{spark.sql.adaptive.enabled = true}). Tuy nhiên, từ Spark 3.2 trở đi AQE được bật mặc định. Nếu AQE hoạt động, nó có thể:
+\begin{itemize}
+    \item \textbf{Coalesce shuffle partitions:} gộp các partition nhỏ sau shuffle, giảm số task thừa.
+    \item \textbf{Convert SortMergeJoin sang BroadcastHashJoin:} nếu sau filter, một bên join nhỏ hơn threshold, AQE tự chuyển strategy.
+    \item \textbf{Optimize skewed join:} chia partition lớn thành nhiều sub-partition. Trong pipeline này, join trên \texttt{ship-state} ít bị skew vì mỗi state chỉ 1 dòng ở bảng average.
+\end{itemize}
+
+% ------------------------------------------------------------------
+\subsection{Kết quả thực thi \& Xuất dữ liệu}
+
+\begin{itemize}
+    \item \textbf{Đường dẫn output:} \texttt{data/output/Task\_2-1.parquet}.
+    \item \textbf{Định dạng:} Single Parquet file, readable bằng Pandas (\texttt{pd.read\_parquet}) hoặc Spark local mode.
+    \item \textbf{Số dòng kết quả:} \textit{(điền sau khi chạy)}.
+    \item \textbf{Kích thước file:} \textit{(điền sau khi chạy)}.
+\end{itemize}
+
+\textbf{Sample output:}
+\begin{lstlisting}[language={}]
+% [PASTE SAMPLE OUTPUT HERE]
+\end{lstlisting}
+
+\textbf{Kiểm chứng thủ công.}
+% [PASTE MANUAL VERIFICATION HERE]
+% Chọn một city-state, ghi tổng order qualified, số cancelled,
+% phép tính percentage và đối chiếu output.
+
+% ------------------------------------------------------------------
 \subsection{Minh chứng bằng hình ảnh}
-Thêm ảnh vào thư mục \texttt{img/2-1} theo các tên sau.
 
 \begin{figure}[H]
     \centering
@@ -128,6 +295,7 @@ Thêm ảnh vào thư mục \texttt{img/2-1} theo các tên sau.
     {\includegraphics[width=0.9\textwidth]{img/2-1/run_success.png}}
     {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh chạy thành công tại \texttt{img/2-1/run\_success.png}}}}
     \caption{Kết quả chạy chương trình Task 2.1}
+    \label{fig:task2_1_run_success}
 \end{figure}
 
 \begin{figure}[H]
@@ -136,6 +304,7 @@ Thêm ảnh vào thư mục \texttt{img/2-1} theo các tên sau.
     {\includegraphics[width=0.9\textwidth]{img/2-1/explain_plan.png}}
     {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh execution plan tại \texttt{img/2-1/explain\_plan.png}}}}
     \caption{Execution plan của Task 2.1}
+    \label{fig:task2_1_explain_plan}
 \end{figure}
 
 \begin{figure}[H]
@@ -144,4 +313,5 @@ Thêm ảnh vào thư mục \texttt{img/2-1} theo các tên sau.
     {\includegraphics[width=0.9\textwidth]{img/2-1/output_preview.png}}
     {\fbox{\parbox[c][4cm][c]{0.85\textwidth}{\centering Thêm ảnh preview output tại \texttt{img/2-1/output\_preview.png}}}}
     \caption{Một phần nội dung file \texttt{Task\_2-1.parquet}}
+    \label{fig:task2_1_output_preview}
 \end{figure}
